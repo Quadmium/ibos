@@ -827,28 +827,54 @@ endm
 mod IBOS-EXTEND is 
   pr IBOS .
   pr SOCKET .
+  pr CONVERSION .
 
   sort SocketState .
   ops idle connecting sending receiving closing : -> SocketState [ctor] .
   op state:_ : SocketState -> Attribute [ctor] .
-  op Client : -> Cid .
-  op client : -> Oid .
+  op SocketClient : -> Cid .
+  op socketClient : -> Oid .
+
+  var TS : Oid .
+  var Cnf : Configuration .
+  var Att : AttributeSet .
+  var L : Label .
+  var N : Nat .
+
+  op string : Label -> String .
+  eq string(url(N)) = string(N, 10) .
 
   op start : -> Configuration .
-  rl [start] : {start} =>  {
-      < ui | toKernel(msg(ui,webapp, MSG-NEW-URL, url(1)) @ mt) >
-      < display | activeWebapp(none), displayedContent(about-blank) >
-      < nic | in(mtLL), nic-out(mtLS) >
-      < webappmgr | nextWPN(0) >
-      < kernel | weblabels(mtWPIS), netlabels(mtNPIS), 
-          displayedTopBar(url(0)), 
-          handledCurrently(none), 
-          nextNPN(0),
-          msgPolicy(policy(webapp, network,MSG-FETCH-URL ),ps
-                    policy(ui,     webapp, MSG-NEW-URL   ),ps
-                    policy(ui,     webapp, MSG-SWITCH-TAB),ps
-                    policy(network,webapp, MSG-RETURN-URL)) >
-  } .
+  rl [start] : 
+    start 
+  =>
+    <>
+    < socketClient : SocketClient | state: idle >
+    createClientTcpSocket(socketManager, socketClient, "localhost", 8080)
+    < ui | toKernel(msg(ui,webapp, MSG-NEW-URL, url(1)) @ mt) >
+    < display | activeWebapp(none), displayedContent(about-blank) >
+    < nic | in(mtLL), nic-out(mtLS) >
+    < webappmgr | nextWPN(0) >
+    < kernel | weblabels(mtWPIS), netlabels(mtNPIS), 
+        displayedTopBar(url(0)), 
+        handledCurrently(none), 
+        nextNPN(0),
+        msgPolicy(policy(webapp, network,MSG-FETCH-URL ),ps
+                policy(ui,     webapp, MSG-NEW-URL   ),ps
+                policy(ui,     webapp, MSG-SWITCH-TAB),ps
+                policy(network,webapp, MSG-RETURN-URL)) > .
+
+  rl [createdSocket] : 
+    createdSocket(socketClient, socketManager, TS)
+    < socketClient : SocketClient | state: idle >
+
+    < kernel | displayedTopBar(L), Att >
+  => 
+    < socketClient : SocketClient | state: sending >
+    send(TS, socketClient, string(L)) 
+
+    < kernel | displayedTopBar(L), Att >
+    .
 endm
 
 eof
