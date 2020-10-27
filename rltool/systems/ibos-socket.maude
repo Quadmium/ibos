@@ -851,18 +851,21 @@ mod IBOS-EXTEND is
     <>
     < socketClient : SocketClient | state: idle >
     createClientTcpSocket(socketManager, socketClient, "localhost", 8080)
+
     < ui | toKernel(msg(ui,webapp, MSG-NEW-URL, url(1)) @ mt) >
     < display | activeWebapp(none), displayedContent(about-blank) >
     < nic | in(mtLL), nic-out(mtLS) >
     < webappmgr | nextWPN(0) >
-    < kernel | weblabels(mtWPIS), netlabels(mtNPIS), 
+    < kernel | 
+        weblabels(mtWPIS), netlabels(mtNPIS), 
         displayedTopBar(url(0)), 
         handledCurrently(none), 
         nextNPN(0),
         msgPolicy(policy(webapp, network,MSG-FETCH-URL ),ps
-                policy(ui,     webapp, MSG-NEW-URL   ),ps
-                policy(ui,     webapp, MSG-SWITCH-TAB),ps
-                policy(network,webapp, MSG-RETURN-URL)) > .
+                  policy(ui,     webapp, MSG-NEW-URL   ),ps
+                  policy(ui,     webapp, MSG-SWITCH-TAB),ps
+                  policy(network,webapp, MSG-RETURN-URL)) >
+    .
 
   rl [createdSocket] : 
     createdSocket(socketClient, socketManager, TS)
