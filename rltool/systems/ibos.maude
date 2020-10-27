@@ -848,7 +848,6 @@ endm
 
 mod IBOS-EXTEND is 
   pr IBOS .
-  pr STRING .
 
   op start : -> Configuration .
   rl [start] : {start} =>  {
