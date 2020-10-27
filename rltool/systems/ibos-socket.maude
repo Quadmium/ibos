@@ -826,6 +826,13 @@ endm
 
 mod IBOS-EXTEND is 
   pr IBOS .
+  pr SOCKET .
+
+  sort SocketState .
+  ops idle connecting sending receiving closing : -> SocketState [ctor] .
+  op state:_ : SocketState -> Attribute [ctor] .
+  op Client : -> Cid .
+  op client : -> Oid .
 
   op start : -> Configuration .
   rl [start] : {start} =>  {
