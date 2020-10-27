@@ -1,0 +1,114 @@
+  ---- from the book All About Maude
+  ---- from the Maude Manual
+  ---- by the Maude team
+  
+  load string-ops.maude
+  load socket.maude
+  
+  mod HTTP/1.0-CLIENT is
+    pr FLOAT .
+    pr CONVERSION .
+    pr STRING-OPS .
+    inc SOCKET .
+    sort State .
+    ops idle connecting sending receiving closing : -> State [ctor] .
+    op state:_ : State -> Attribute [ctor] .
+    op requester:_ : Oid -> Attribute [ctor] .
+    op url:_ : String -> Attribute [ctor] .
+    op stored:_ : String -> Attribute [ctor] .
+
+    op HttpClient : -> Cid .
+    op httpClient : -> Oid .
+    op dummy : -> Oid .
+
+    op Ball : -> Cid .
+    op ball : -> Oid .
+    op y:_ : Float -> Attribute [ctor] .
+    op x:_ : Float -> Attribute [ctor] .
+    op vy:_ : Float -> Attribute [ctor] .
+    op vx:_ : Float -> Attribute [ctor] .
+
+    op getPage : Oid Oid String -> Msg [msg ctor] .
+    op gotPage : Oid Oid String String -> Msg [msg ctor] .
+
+    op width : -> Float .
+    eq width = 8.0 .
+
+    vars H R R' TS : Oid .
+    vars U S ST : String .
+    vars DT X VX NVX NX NVX_T NX_T Y VY NVY NY NVY_T NY_T : Float .
+    vars N : FindResult .
+    
+    op trim : String -> String .
+    eq trim(S) = if find(S, "\n", 0) == notFound then S else substr(S, 0, find(S, "\n", 0)) fi .
+
+    rl [getPage] :
+      getPage(H, R, U)
+      < H : HttpClient | 
+          state: idle, requester: R', url: S, stored: "" >
+      => < H : HttpClient | 
+             state: connecting, requester: R, url: U, stored: "" >
+         createClientTcpSocket(socketManager, H, 
+           extractHostName(U), 8080) .
+
+    rl [createdSocket] :
+      createdSocket(H, socketManager, TS)
+      < H : HttpClient | 
+          state: connecting, requester: R, url: U, stored: "" >
+      => < H : HttpClient | 
+             state: receiving, requester: R, url: U, stored: "" >
+         receive(TS, H) .
+
+    rl [sent] :
+      sent(H, TS)
+      < H : HttpClient | 
+          state: sending, requester: R, url: U, stored: "" >
+      => < H : HttpClient | 
+             state: receiving, requester: R, url: U, stored: "" >
+         receive(TS, H) .
+
+    crl [received] :
+      received(H, TS, S) 
+      < H : HttpClient | 
+          state: receiving, requester: R, url: U, stored: ST >
+      < ball : Ball | x: X, vx: VX, y: Y, vy: VY >
+      => receive(TS, H)
+         send(TS, H, string(NX) + "," + string(NY))
+         < ball : Ball | x: NX, vx: NVX, y: NY, vy: NVY >
+         < H : HttpClient | state: receiving, 
+             requester: R, url: U, stored: (ST) >     
+      if DT := float(trim(S)) /\
+         NVY_T := VY - 9.8 * DT /\
+         NY_T := Y + NVY_T * DT /\ 
+         NY := if NY_T >= 0.0 then NY_T else 0.0 fi /\
+         NVY := if NY_T >= 0.0 then NVY_T else 15.0 fi /\
+         NVX_T := VX /\
+         NX_T := X + NVX_T * DT /\
+         NVX := if NX_T > width or NX_T < (-1.0 * width) then (-1.0 * NVX_T) else NVX_T fi /\ 
+         NX := if NX_T > width then width else (if NX_T < (-1.0 * width) then (-1.0 * width) else NX_T fi) fi .
+    
+    rl [drop] :
+      sent(H, TS)
+      < H : HttpClient | 
+          state: receiving, requester: R, url: U, stored: ST >
+      => < H : HttpClient | 
+          state: receiving, requester: R, url: U, stored: ST > .
+       
+    rl [closedSocket] : 
+      closedSocket(H, TS, S)
+      < H : HttpClient | 
+          state: receiving, requester: R, url: U, stored: ST >
+      => gotPage(R, H, extractHeader(ST), extractBody(ST)) .
+
+    op start : String -> Configuration .
+    eq start(S) 
+      = <> 
+        getPage(httpClient, dummy, S)
+        < httpClient : HttpClient | state: idle, requester: dummy, 
+            url: "", stored: "" >
+        < ball : Ball | x: 0.0, y: 5.0, vx: 3.0, vy: 0.0 > .
+  endm
+
+***(
+  Maude> erew start("localhost") .
+)  
