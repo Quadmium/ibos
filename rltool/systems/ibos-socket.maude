@@ -832,6 +832,8 @@ mod IBOS-EXTEND is
   sort SocketState .
   ops idle connecting sending receiving closing : -> SocketState [ctor] .
   op state:_ : SocketState -> Attribute [ctor] .
+  op name:_ : Oid -> Attribute [ctor] .
+  op noname : -> Oid .
   op SocketClient : -> Cid .
   op socketClient : -> Oid .
 
@@ -840,30 +842,37 @@ mod IBOS-EXTEND is
   var TS : Oid .
   var Cnf : Configuration .
   var Att : AttributeSet .
-  var L : Label .
+  vars L L' : Label .
   var N : Nat .
   var ML : MessageList .
   var S : String .
+  var S' : String .
 
   op string : Label -> String .
   eq string(url(N)) = string(N, 10) .
   eq string(url(S)) = S .
+
+  eq url(S) ~l url(S') = S == S' [variant] .
+
+  op LastSent : -> Cid .
+  op lastSent : -> Oid .
 
   op start : -> Configuration .
   rl [start] : 
     start 
   =>
     <>
-    < socketClient : SocketClient | state: connecting >
+    < lastSent : LastSent | displayedTopBar(url("0")) >
+    < socketClient : SocketClient | state: connecting, name: noname >
     createClientTcpSocket(socketManager, socketClient, "localhost", 8080)
 
-    < ui | toKernel(msg(ui,webapp, MSG-NEW-URL, url("1")) @ mt) >
+    < ui | toKernel(msg(ui,webapp, MSG-NEW-URL, url("0")) @ mt) >
     < display | activeWebapp(none), displayedContent(about-blank) >
     < nic | in(mtLL), nic-out(mtLS) >
     < webappmgr | nextWPN(0) >
     < kernel | 
         weblabels(mtWPIS), netlabels(mtNPIS), 
-        displayedTopBar(url(0)), 
+        displayedTopBar(url("0")), 
         handledCurrently(none), 
         nextNPN(0),
         msgPolicy(policy(webapp, network,MSG-FETCH-URL ),ps
@@ -873,35 +882,45 @@ mod IBOS-EXTEND is
     .
 
   rl [createdSocket] : 
-    < socketClient : SocketClient | state: connecting >
+    < socketClient : SocketClient | state: connecting, name: noname >
     createdSocket(socketClient, socketManager, TS)
   => 
-    < socketClient : SocketClient | state: receiving >
+    < socketClient : SocketClient | state: receiving, name: TS >
     receive(TS, socketClient)
     .
 
   rl [received] : 
-    < socketClient : SocketClient | state: receiving >
+    < socketClient : SocketClient | state: receiving, name: TS >
     received(socketClient, TS, S)
 
     < ui | toKernel(ML) >
     < kernel | displayedTopBar(L), Att >
   => 
-    < socketClient : SocketClient | state: sending >
-    send(TS, socketClient, string(L)) 
+    < socketClient : SocketClient | state: sending, name: TS >
 
     < ui | toKernel(ML @ msg(ui,webapp, MSG-NEW-URL, url(S))) >
     < kernel | displayedTopBar(L), Att >
     .
-
   
   rl [sent] :
-    < socketClient : SocketClient | state: sending >
+    < socketClient : SocketClient | state: sending, name: TS >
     sent(socketClient, TS)
   =>
-    < socketClient : SocketClient | state: receiving >
+    < socketClient : SocketClient | state: receiving, name: TS >
     receive(TS, socketClient)
     .
+
+  crl [newTopBar] :
+    < lastSent : LastSent | displayedTopBar(L) >
+    < kernel | displayedTopBar(L'), Att >
+    < socketClient : SocketClient | state: sending, name: TS >
+  =>
+    send(TS, socketClient, string(L')) 
+
+    < lastSent : LastSent | displayedTopBar(L') >
+    < kernel | displayedTopBar(L'), Att >
+    < socketClient : SocketClient | state: sending, name: TS >
+  if L ~l L' == false .
     
 endm
 

@@ -1,0 +1,54 @@
+<?xml version='1.0' encoding='utf-8'?>
+<interface version="1.0">
+  <object class="ttk.Frame" id="mainwindow">
+    <property name="height">200</property>
+    <property name="width">300</property>
+    <layout manager="pack">
+      <property name="propagate">True</property>
+      <property name="side">top</property>
+    </layout>
+    <child>
+      <object class="ttk.Button" id="button_send">
+        <property name="command">on_button_send_click</property>
+        <property name="text" translatable="yes">Send</property>
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="x">10</property>
+          <property name="y">40</property>
+        </layout>
+      </object>
+    </child>
+    <child>
+      <object class="ttk.Entry" id="url_entry">
+        <property name="text" translatable="yes">URL 0</property>
+        <property name="textvariable">string:url_entry_text</property>
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="x">90</property>
+          <property name="y">7</property>
+        </layout>
+      </object>
+    </child>
+    <child>
+      <object class="ttk.Label" id="label_2">
+        <property name="text" translatable="yes">New URL</property>
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="x">10</property>
+          <property name="y">10</property>
+        </layout>
+      </object>
+    </child>
+    <child>
+      <object class="ttk.Label" id="url_label">
+        <property name="text" translatable="yes">Current URL: </property>
+        <property name="textvariable">string:url_label_text</property>
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="x">10</property>
+          <property name="y">80</property>
+        </layout>
+      </object>
+    </child>
+  </object>
+</interface>
