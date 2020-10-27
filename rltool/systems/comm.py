@@ -16,8 +16,12 @@ def main():
     sock.listen(1)
     connection, client_address = sock.accept()
 
-    connection.sendall("state".encode())
-    print(connection.recv(1000).decode())
+    i = 0
+    while True:
+        connection.sendall("url{}".format(i).encode())
+        i += 1
+        print(connection.recv(1000).decode())
+        time.sleep(5)
 
     connection.close()
 

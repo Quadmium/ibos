@@ -835,24 +835,29 @@ mod IBOS-EXTEND is
   op SocketClient : -> Cid .
   op socketClient : -> Oid .
 
+  op url : String -> Label [ctor] .
+
   var TS : Oid .
   var Cnf : Configuration .
   var Att : AttributeSet .
   var L : Label .
   var N : Nat .
+  var ML : MessageList .
+  var S : String .
 
   op string : Label -> String .
   eq string(url(N)) = string(N, 10) .
+  eq string(url(S)) = S .
 
   op start : -> Configuration .
   rl [start] : 
     start 
   =>
     <>
-    < socketClient : SocketClient | state: idle >
+    < socketClient : SocketClient | state: connecting >
     createClientTcpSocket(socketManager, socketClient, "localhost", 8080)
 
-    < ui | toKernel(msg(ui,webapp, MSG-NEW-URL, url(1)) @ mt) >
+    < ui | toKernel(msg(ui,webapp, MSG-NEW-URL, url("1")) @ mt) >
     < display | activeWebapp(none), displayedContent(about-blank) >
     < nic | in(mtLL), nic-out(mtLS) >
     < webappmgr | nextWPN(0) >
@@ -868,16 +873,36 @@ mod IBOS-EXTEND is
     .
 
   rl [createdSocket] : 
+    < socketClient : SocketClient | state: connecting >
     createdSocket(socketClient, socketManager, TS)
-    < socketClient : SocketClient | state: idle >
+  => 
+    < socketClient : SocketClient | state: receiving >
+    receive(TS, socketClient)
+    .
 
+  rl [received] : 
+    < socketClient : SocketClient | state: receiving >
+    received(socketClient, TS, S)
+
+    < ui | toKernel(ML) >
     < kernel | displayedTopBar(L), Att >
   => 
     < socketClient : SocketClient | state: sending >
     send(TS, socketClient, string(L)) 
 
+    < ui | toKernel(ML @ msg(ui,webapp, MSG-NEW-URL, url(S))) >
     < kernel | displayedTopBar(L), Att >
     .
+
+  
+  rl [sent] :
+    < socketClient : SocketClient | state: sending >
+    sent(socketClient, TS)
+  =>
+    < socketClient : SocketClient | state: receiving >
+    receive(TS, socketClient)
+    .
+    
 endm
 
 eof
