@@ -1,0 +1,210 @@
+Maude> rew [1] {start} .
+rewrite [1] in IBOS-STOP : {start} .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(0),handledCurrently(none),
+    weblabels(mtWPIS),netlabels(mtNPIS),displayedTopBar(url(0)) > < display |
+    activeWebapp(none),displayedContent(about-blank) > < nic | in(mtLL),
+    nic-out(mtLS) > < webappmgr | nextWPN(0) > < ui | toKernel(msg(ui, webapp,
+    MSG-NEW-URL, url(1))) >}
+Maude> cont 1 .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(0),handledCurrently(msg(ui,
+    webapp, MSG-NEW-URL, url(1))),weblabels(mtWPIS),netlabels(mtNPIS),
+    displayedTopBar(url(0)) > < display | activeWebapp(none),displayedContent(
+    about-blank) > < nic | in(mtLL),nic-out(mtLS) > < webappmgr | nextWPN(0) >
+    < ui | toKernel(mt) >}
+Maude> cont 1 .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(0),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(mtNPIS),displayedTopBar(url(1))
+    > < display | activeWebapp(webapp(0)),displayedContent(about-blank) > < nic
+    | in(mtLL),nic-out(mtLS) > < webappmgr | nextWPN(1) > < ui | toKernel(mt) >
+    < webapp(0) | rendered(about-blank),URL(url(1)),loading(false),fromKernel(
+    mt),toKernel(mt) >}
+Maude> cont 1 .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(0),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(mtNPIS),displayedTopBar(url(1))
+    > < display | activeWebapp(webapp(0)),displayedContent(about-blank) > < nic
+    | in(mtLL),nic-out(mtLS) > < webappmgr | nextWPN(1) > < ui | toKernel(mt) >
+    < webapp(0) | rendered(about-blank),URL(url(1)),loading(true),fromKernel(
+    mt),toKernel(msg(webapp(0), network, MSG-FETCH-URL, url(1))) >}
+Maude> cont 1 .
+rewrites: 2 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(msg(
+    webapp(0), network(0), MSG-FETCH-URL, url(1))),weblabels(pi(webapp(0), url(
+    1))),netlabels(pi(network(0), url(1), url(1))),displayedTopBar(url(1)) > <
+    display | activeWebapp(webapp(0)),displayedContent(about-blank) > < nic |
+    in(mtLL),nic-out(mtLS) > < webappmgr | nextWPN(1) > < ui | toKernel(mt) > <
+    webapp(0) | rendered(about-blank),URL(url(1)),loading(true),fromKernel(mt),
+    toKernel(mt) > < network(0) | fromKernel(mt),toKernel(mt),returnTo(webapp(
+    0)),in(mtLL),out(mtLL),mem-in(nolabel),mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(about-blank) > < nic | in(mtLL),nic-out(mtLS) > <
+    webappmgr | nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(
+    about-blank),URL(url(1)),loading(true),fromKernel(mt),toKernel(mt) > <
+    network(0) | fromKernel(msg(webapp(0), network(0), MSG-FETCH-URL, url(1))),
+    toKernel(mt),returnTo(webapp(0)),in(mtLL),out(mtLL),mem-in(nolabel),
+    mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 2 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(about-blank) > < nic | in(mtLL),nic-out(mtLS) > <
+    webappmgr | nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(
+    about-blank),URL(url(1)),loading(true),fromKernel(mt),toKernel(mt) > <
+    network(0) | fromKernel(mt),toKernel(mt),returnTo(webapp(0)),in(mtLL),out(
+    url(1)),mem-in(nolabel),mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(about-blank) > < nic | in(mtLL),nic-out(mtLS) > <
+    webappmgr | nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(
+    about-blank),URL(url(1)),loading(true),fromKernel(mt),toKernel(mt) > <
+    network(0) | fromKernel(mt),toKernel(mt),returnTo(webapp(0)),in(mtLL),out(
+    mtLL),mem-in(nolabel),mem-out(url(1)) >}
+Maude> cont 1 .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(about-blank) > < nic | in(mtLL),nic-out(url(1)) > <
+    webappmgr | nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(
+    about-blank),URL(url(1)),loading(true),fromKernel(mt),toKernel(mt) > <
+    network(0) | fromKernel(mt),toKernel(mt),returnTo(webapp(0)),in(mtLL),out(
+    mtLL),mem-in(nolabel),mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 2 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(about-blank) > < nic | in(url(1)),nic-out(mtLS) > <
+    webappmgr | nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(
+    about-blank),URL(url(1)),loading(true),fromKernel(mt),toKernel(mt) > <
+    network(0) | fromKernel(mt),toKernel(mt),returnTo(webapp(0)),in(mtLL),out(
+    mtLL),mem-in(nolabel),mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 1 in 4ms cpu (0ms real) (250 rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(about-blank) > < nic | in(mtLL),nic-out(mtLS) > <
+    webappmgr | nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(
+    about-blank),URL(url(1)),loading(true),fromKernel(mt),toKernel(mt) > <
+    network(0) | fromKernel(mt),toKernel(mt),returnTo(webapp(0)),in(mtLL),out(
+    mtLL),mem-in(url(1)),mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 2 in 4ms cpu (0ms real) (500 rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(about-blank) > < nic | in(mtLL),nic-out(mtLS) > <
+    webappmgr | nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(
+    about-blank),URL(url(1)),loading(true),fromKernel(mt),toKernel(mt) > <
+    network(0) | fromKernel(mt),toKernel(mt),returnTo(webapp(0)),in(url(1)),
+    out(mtLL),mem-in(nolabel),mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(about-blank) > < nic | in(mtLL),nic-out(mtLS) > <
+    webappmgr | nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(
+    about-blank),URL(url(1)),loading(true),fromKernel(mt),toKernel(mt) > <
+    network(0) | fromKernel(mt),toKernel(msg(network(0), webapp(0),
+    MSG-RETURN-URL, url(1))),returnTo(webapp(0)),in(mtLL),out(mtLL),mem-in(
+    nolabel),mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(msg(
+    network(0), webapp(0), MSG-RETURN-URL, url(1))),weblabels(pi(webapp(0),
+    url(1))),netlabels(pi(network(0), url(1), url(1))),displayedTopBar(url(1))
+    > < display | activeWebapp(webapp(0)),displayedContent(about-blank) > < nic
+    | in(mtLL),nic-out(mtLS) > < webappmgr | nextWPN(1) > < ui | toKernel(mt) >
+    < webapp(0) | rendered(about-blank),URL(url(1)),loading(true),fromKernel(
+    mt),toKernel(mt) > < network(0) | fromKernel(mt),toKernel(mt),returnTo(
+    webapp(0)),in(mtLL),out(mtLL),mem-in(nolabel),mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(about-blank) > < nic | in(mtLL),nic-out(mtLS) > <
+    webappmgr | nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(
+    about-blank),URL(url(1)),loading(true),fromKernel(msg(network(0), webapp(
+    0), MSG-RETURN-URL, url(1))),toKernel(mt) > < network(0) | fromKernel(mt),
+    toKernel(mt),returnTo(webapp(0)),in(mtLL),out(mtLL),mem-in(nolabel),
+    mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 2 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(about-blank) > < nic | in(mtLL),nic-out(mtLS) > <
+    webappmgr | nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(url(
+    1)),URL(url(1)),loading(true),fromKernel(mt),toKernel(mt) > < network(0) |
+    fromKernel(mt),toKernel(mt),returnTo(webapp(0)),in(mtLL),out(mtLL),mem-in(
+    nolabel),mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 2 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(url(1)) > < nic | in(mtLL),nic-out(mtLS) > < webappmgr |
+    nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(url(1)),URL(url(
+    1)),loading(true),fromKernel(mt),toKernel(mt) > < network(0) | fromKernel(
+    mt),toKernel(mt),returnTo(webapp(0)),in(mtLL),out(mtLL),mem-in(nolabel),
+    mem-out(nolabel) >}
+Maude> cont 1 .
+rewrites: 1 in 0ms cpu (0ms real) (~ rewrites/second)
+result State: {< kernel | msgPolicy(policy(webapp, network, MSG-FETCH-URL),ps
+    policy(network, webapp, MSG-RETURN-URL),ps policy(ui, webapp, MSG-NEW-URL),
+    ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(1),handledCurrently(none),
+    weblabels(pi(webapp(0), url(1))),netlabels(pi(network(0), url(1), url(1))),
+    displayedTopBar(url(1)) > < display | activeWebapp(webapp(0)),
+    displayedContent(url(1)) > < nic | in(mtLL),nic-out(mtLS) > < webappmgr |
+    nextWPN(1) > < ui | toKernel(mt) > < webapp(0) | rendered(url(1)),URL(url(
+    1)),loading(true),fromKernel(mt),toKernel(mt) > < network(0) | fromKernel(
+    mt),toKernel(mt),returnTo(webapp(0)),in(mtLL),out(mtLL),mem-in(nolabel),
+    mem-out(nolabel) >}

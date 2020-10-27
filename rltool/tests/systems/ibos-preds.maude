@@ -1,0 +1,1250 @@
+load ../../systems/ibos.maude
+
+---
+--- [PARTIALLY] FVP
+---
+
+---
+--- 1. Separate ProcessIds into Net/WebProcs and everything else
+---
+fmod PROC-ID-FVP-EXT is
+  pr PROC-ID .
+
+  --- 1. Separate ProcessIds into Net/WebProcs and everything else
+  sort ConcNetWebProcId .
+  subsort ConcNetProcId ConcWebProcId < ConcNetWebProcId < ConcPipeId .
+  sort NonConcNetWebProcId .
+  subsort UIId NonPipeId < NonConcNetWebProcId .
+endfm
+
+---
+--- 2. Separate Configurations into those made up of Net/WebProcs and everything else
+--- 3. Add partially FVP predicate for checking if an object with the named ID is in the configuration
+--- 4. Add partially FVP predicate for checking for duplicate object IDs in the configuration
+---
+fmod CONFIGURATION-FVP-EXT is
+  pr PROC-ID-FVP-EXT .
+  pr KERNEL-POLICIES-FVP .
+
+  var P P' : ConcProcId . var A A' : AttributeSet . var C : Configuration .
+  var P? : ProcessId .
+
+  --- 2. Separate Configurations into those made up of Net/WebProcs and everything else
+  sorts NetWebProcObject NetWebProcConfig NetWebProcNeConfig .
+  subsort NetWebProcObject < Object .
+  subsort NetWebProcObject < NetWebProcNeConfig < NeConfiguration NetWebProcConfig < Configuration .
+  subsort EmptyConfiguration < NetWebProcConfig .
+  op <_|_> : ConcNetWebProcId AttributeSet -> NetWebProcObject [ctor ditto metadata "34"] .
+  op __ : NetWebProcConfig   NetWebProcConfig -> NetWebProcConfig   [ctor ditto metadata "36"] .
+  op __ : NetWebProcNeConfig NetWebProcConfig -> NetWebProcNeConfig [ctor ditto metadata "36"] .
+
+  sorts SpecialObject SpecialConfig SpecialNeConfig .
+  subsort SpecialObject < Object .
+  subsort SpecialObject < SpecialNeConfig < NeConfiguration SpecialConfig < Configuration .
+  subsort EmptyConfiguration < SpecialConfig .
+  op <_|_> : NonConcNetWebProcId AttributeSet -> SpecialObject [ctor ditto metadata "34"] .
+  op __ : SpecialConfig   SpecialConfig -> SpecialConfig   [ctor ditto metadata "36"] .
+  op __ : SpecialNeConfig SpecialConfig -> SpecialNeConfig [ctor ditto metadata "36"] .
+
+  --- 3. Add partially FVP predicate for checking if an object with the named ID is in the configuration
+  op in-conf? : ProcessId Configuration -> Bool [metadata "108 true"] .
+  eq in-conf?(P, < P   | A' > C) = true [variant] .
+ ceq in-conf?(P?,< P'  | A' > C) = in-conf?(P?,C) if P? ~p P' = false .
+  eq in-conf?(P?,none)           = false .
+
+  --- 4. Add partially FVP predicate for checking for duplicate object IDs in the configuration
+  op conf-dupl? : Configuration -> Bool [metadata "109 true"] .
+  eq conf-dupl?(< P | A  > < P | A' > C) = true .
+  eq conf-dupl?(none) = false .
+ ceq conf-dupl?(< P | none > C) = conf-dupl?(C) if in-conf?(P,C) = false .
+endfm
+
+---
+--- 5. Add LabelPair and MaybeLabelPair datatypes
+--- 6. Add MaybeLabelPair equality predicate _~lp_
+--- 7. Add LabelPair projection functions
+--- 8. Add _blank-or-equal_ function
+---
+fmod LABEL-FVP-EXT is
+  pr LABEL .
+
+  var L L' : Label .
+  var N : Nat .
+  var P : NzNat .
+  var L1 L2 L1' L2' : MaybeLabel .
+  var MMLP : MaybeMaybeLabel+Pair .
+  var MLP : MaybeLabelPair .
+
+  --- 5. Add LabelPair and MaybeLabelPair datatypes
+  sort LabelPair MaybeLabelPair MaybeLabel+Pair MaybeMaybeLabel+Pair .
+  subsort LabelPair < MaybeLabelPair  < MaybeMaybeLabel+Pair .
+  subsort LabelPair < MaybeLabel+Pair < MaybeMaybeLabel+Pair .
+  op ((_,_)) : Label Label           -> LabelPair            [ctor metadata "88"] .
+  op ((_,_)) : MaybeLabel MaybeLabel -> MaybeMaybeLabel+Pair [ctor metadata "88"] .
+  op nopair  :                       -> MaybeLabelPair       [ctor metadata "89"] .
+
+  --- 6. Add MaybeLabelPair equality predicate _~lp_
+  op _~lp_ : MaybeMaybeLabel+Pair MaybeMaybeLabel+Pair -> Bool [comm metadata "90"] .
+  eq MMLP         ~lp MMLP      = true                    [variant] .
+  eq (L1,L2)      ~lp (L1',L2') = L1 ~l L1' and L2 ~l L2' [variant] .
+  eq nopair       ~lp (L1, L2 ) = false                   [variant] .
+  eq (nolabel,L2) ~lp MLP       = false                   [variant] .
+  eq (L1,nolabel) ~lp MLP       = false                   [variant] .
+
+  --- 7. Add LabelPair projection functions
+  op inlbl : MaybeLabelPair -> MaybeLabel [metadata "91"] .
+  eq inlbl((L1,L2))  = L1      [variant] .
+  eq inlbl(nopair)   = nolabel [variant] .
+
+  op outlbl : MaybeLabelPair -> MaybeLabel [metadata "92"] .
+  eq outlbl((L1,L2)) = L2      [variant] .
+  eq outlbl(nopair)  = nolabel [variant] .
+
+  --- 8. Add _blank-or-equal_ function
+  op _blank-or-equal_ : Label Label -> Bool [metadata "94"] .
+  eq about-blank blank-or-equal L           = true  [variant] .
+  eq L           blank-or-equal L           = true  [variant] .
+  eq url(N)      blank-or-equal about-blank = false [variant] .
+  eq url(N)      blank-or-equal url(N + P)  = false [variant] .
+  eq url(N + P)  blank-or-equal url(N)      = false [variant] .
+endfm
+
+---
+--- 9. Refine MsgType/Msg into subsorts for each kind of message
+--- 10. Refine MessageList into empty and non-empty variants
+--- 11. Refine MessageList into those with a FETCH message and those without
+--- 12. Add MaybeMessageList type
+--- 13. Add predicate that returns false iff a MessageList contains a NEW-URL message with a given label
+---
+fmod MSG-FVP-EXT is
+  pr MSG-LIST .
+
+  var PI PI' : PipeId .
+  var L OUT : Label .
+  var ML ML2 : MessageList .
+  var RetMT : RetMsgType .
+  var FetchMT : FetchMsgType .
+
+  --- 9. Refine MsgType/Msg into subsorts for each kind of message
+  sort FetchMsgType RetMsgType NonRetFetchMsgType NonRetMsgType NonFetchMsgType .
+  subsort NonRetFetchMsgType < NonRetMsgType NonFetchMsgType < MsgType .
+  subsort FetchMsgType < NonRetMsgType .
+  subsort RetMsgType   < NonFetchMsgType .
+  op MSG-NEW-URL    : -> NonRetFetchMsgType [ctor metadata "46"] .
+  op MSG-FETCH-URL  : -> FetchMsgType       [ctor metadata "47"] .
+  op MSG-RETURN-URL : -> RetMsgType         [ctor metadata "48"] .
+  op MSG-SWITCH-TAB : -> NonRetFetchMsgType [ctor metadata "49"] .
+  ----------------------------------------------------
+  eq MSG-RETURN-URL ~m M:NonRetMsgType   = false .
+  eq MSG-FETCH-URL  ~m M:NonFetchMsgType = false .
+
+  sort NonRetFetchMsg FetchMsg RetMsg NonRetMsg NonFetchMsg .
+  subsort NonRetFetchMsg < NonRetMsg NonFetchMsg < Message .
+  subsort FetchMsg < NonRetMsg .
+  subsort RetMsg   < NonFetchMsg .
+  op msg : PipeId PipeId FetchMsgType       Label -> FetchMsg       [ctor ditto metadata "50"] .
+  op msg : PipeId PipeId RetMsgType         Label -> RetMsg         [ctor ditto metadata "50"] .
+  op msg : PipeId PipeId NonFetchMsgType    Label -> NonFetchMsg    [ctor ditto metadata "50"] .
+  op msg : PipeId PipeId NonRetMsgType      Label -> NonRetMsg      [ctor ditto metadata "50"] .
+  op msg : PipeId PipeId NonRetFetchMsgType Label -> NonRetFetchMsg [ctor ditto metadata "50"] .
+
+  --- 10. Refine MessageList into empty and non-empty variants
+  sort EmptyMessageList .
+  subsort EmptyMessageList < MessageList .
+  op mt  : -> EmptyMessageList [ctor ditto metadata "5"] .
+  op _@_ : EmptyMessageList EmptyMessageList -> EmptyMessageList [ctor ditto metadata "53"] .
+
+  sort NeMessageList .
+  subsort Message < NeMessageList < MessageList .
+  op _@_ : NeMessageList MessageList -> NeMessageList [ctor ditto metadata "53"] .
+  op _@_ : MessageList NeMessageList -> NeMessageList [ctor ditto metadata "53"] .
+
+  --- 11. Refine MessageList into those with a FETCH message and those without
+  sort NonFetchMsgList NeNonFetchMsgList HasFetchMsgList .
+  subsort EmptyMessageList < NonFetchMsgList < MessageList .
+  subsort NonFetchMsg < NeNonFetchMsgList < NonFetchMsgList NeMessageList .
+  subsort FetchMsg < HasFetchMsgList < NeMessageList .
+  op _@_ : NonFetchMsgList NeNonFetchMsgList -> NeNonFetchMsgList [ctor ditto metadata "53"] .
+  op _@_ : NeNonFetchMsgList NonFetchMsgList -> NeNonFetchMsgList [ctor ditto metadata "53"] .
+  op _@_ : NonFetchMsgList NonFetchMsgList -> NonFetchMsgList [ctor ditto metadata "53"] .
+  op _@_ : NonFetchMsgList HasFetchMsgList -> HasFetchMsgList [ctor ditto metadata "53"] .
+  op _@_ : HasFetchMsgList NonFetchMsgList -> HasFetchMsgList [ctor ditto metadata "53"] .
+  op _@_ : HasFetchMsgList HasFetchMsgList -> HasFetchMsgList [ctor ditto metadata "53"] .
+  op _@_ : MessageList     HasFetchMsgList -> HasFetchMsgList [ctor ditto metadata "53"] .
+  op _@_ : HasFetchMsgList MessageList     -> HasFetchMsgList [ctor ditto metadata "53"] .
+
+  --- 12. Add MaybeMessageList type
+  sort MaybeMessageList .
+  subsort MessageList < MaybeMessageList .
+  op nolist : -> MaybeMessageList [ctor metadata "93"] .
+
+  --- 13. Add predicate that returns false iff a MessageList contains a NEW-URL message with a given label
+  --- NB: this is an auxiliary predicate for ui-consistent
+  op newurl-nodupl? : Label MessageList -> Bool [metadata "198 false"] .
+  eq newurl-nodupl?(L,ML @ msg(PI,PI',MSG-NEW-URL,   L)   @ ML2) = false [variant] .
+ ceq newurl-nodupl?(L,ML @ msg(PI,PI',MSG-NEW-URL,   OUT) @ ML2) = true if L ~l OUT = false /\ newurl-nodupl?(L,ML @ ML2) = true .
+ ceq newurl-nodupl?(L,ML @ msg(PI,PI',RetMT,         OUT) @ ML2) = true if                     newurl-nodupl?(L,ML @ ML2) = true .
+ ceq newurl-nodupl?(L,ML @ msg(PI,PI',FetchMT,       OUT) @ ML2) = true if                     newurl-nodupl?(L,ML @ ML2) = true .
+ ceq newurl-nodupl?(L,ML @ msg(PI,PI',MSG-SWITCH-TAB,OUT) @ ML2) = true if                     newurl-nodupl?(L,ML @ ML2) = true .
+  eq newurl-nodupl?(L,mt)                                        = true .
+endfm
+
+---
+--- 14. Refine Net/WebProcInfoSet into empty and non-empty variants
+--- 15. Add Net/WebProcInfo equality predicates
+--- 16. Add partially FVP predicates for checking if a ProcessId is mapped in a Net/WebProcInfoSet
+---
+fmod KERNEL-METADATA-FVP-EXT is
+  pr KERNEL-POLICIES-FVP .
+  pr LABEL-FVP-EXT .
+
+  var WI WI' : WebProcInfo . var WIS : WebProcInfoSet .
+  var NI NI' : NetProcInfo . var NIS : NetProcInfoSet .
+  var WP WP' : ConcWebProcId .
+  var NP NP' : ConcNetProcId .
+  var L1 L2 L3 L4 : Label .
+
+  --- 14. Refine Net/WebProcInfoSet into empty and non-empty variants
+  sort NeWebProcInfoSet .
+  subsort WebProcInfo < NeWebProcInfoSet < WebProcInfoSet .
+  sort NeNetProcInfoSet .
+  subsort NetProcInfo < NeNetProcInfoSet < NetProcInfoSet .
+  op _,wp_ : NeWebProcInfoSet WebProcInfoSet -> NeWebProcInfoSet [ctor ditto metadata "73"] .
+  op _,np_ : NeNetProcInfoSet NetProcInfoSet -> NeNetProcInfoSet [ctor ditto metadata "76"] .
+
+  --- 15. Add Net/WebProcInfo equality predicates
+  op _~wpi_ : WebProcInfo WebProcInfo -> Bool [metadata "129"] .
+  eq pi(WP,L1)    ~wpi pi(WP',L2)    = WP ~p WP' and L1 ~l L2 .
+
+  op _~npi_ : NetProcInfo NetProcInfo -> Bool [metadata "130"] .
+  eq pi(NP,L1,L2) ~npi pi(NP',L3,L4) = NP ~p NP' and L1 ~l L3 and L2 ~l L4 .
+
+  --- 16. Add partially FVP predicates for checking if a ProcessId is mapped in a Net/WebProcInfoSet
+  op weblabel-and-pid? : WebProcInfo WebProcInfoSet -> Bool [ctor metadata "131 true"] .
+  eq weblabel-and-pid?(WI,(WI  ,wp WIS)) = true [variant] .
+ ceq weblabel-and-pid?(WI,(WI' ,wp WIS)) = false if WI ~wpi WI' = false /\ weblabel-and-pid?(WI,WIS) = false .
+  eq weblabel-and-pid?(WI,mtWPIS)        = false .
+
+  op netlabelpair-and-pid? : NetProcInfo NetProcInfoSet -> Bool [ctor metadata "132 true"] .
+  eq netlabelpair-and-pid?(NI,(NI ,np NIS)) = true [variant] .
+ ceq netlabelpair-and-pid?(NI,(NI',np NIS)) = false if NI ~npi NI' = false /\ netlabelpair-and-pid?(NI,NIS) = false .
+  eq netlabelpair-and-pid?(NI,mtNPIS)       = false .
+endfm
+
+---
+--- 17. Generalize typing of returnTo(), rendered(), fromKernel(), and toKernel() attributes (used for attribute canonicalization)
+--- 18. Add attribute type equality predicate _~a_
+--- 19. Add partially FVP in-attrset?(_|_) predicate for checking if an attribute of a given type exists in an attribute set
+--- 20. Add partially FVP attr-dupl?() predicate for checking if an attribute type occurs twice in a given attribute set
+---
+fmod ATTRIBUTE-FVP-EXT is
+  pr PROC-ID-FVP-EXT .
+  pr KERNEL-POLICIES-FVP .
+  pr MSG-FVP-EXT .
+  var A A' : Attribute . var AS AS' : AttributeSet .
+
+  --- 17. Generalize typing of returnTo(), rendered(), fromKernel(), and toKernel() attributes (used for attribute canonicalization)
+  op returnTo   : MaybeConcPipeId  -> Attribute [ctor metadata "60"] .
+  op rendered   : MaybeLabel       -> Attribute [ctor metadata "57"] .
+  op fromKernel : MaybeMessageList -> Attribute [ctor metadata "54"] .
+  op toKernel   : MaybeMessageList -> Attribute [ctor metadata "55"] .
+
+  --- 18. Add attribute type equality predicate _~a_
+  op _~a_ : Attribute Attribute -> Bool [comm metadata "100"] .
+  eq fromKernel      (X:MaybeMessageList) ~a fromKernel      (Y:MaybeMessageList) = true [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a toKernel        (Y:MaybeMessageList) = true [variant] .
+  eq nextWPN         (X:Nat)              ~a nextWPN         (Y:Nat)              = true [variant] .
+  eq rendered        (X:MaybeLabel)       ~a rendered        (Y:MaybeLabel)       = true [variant] .
+  eq URL             (X:Label)            ~a URL             (Y:Label)            = true [variant] .
+  eq loading         (X:Bool)             ~a loading         (Y:Bool)             = true [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a returnTo        (Y:MaybeConcPipeId)  = true [variant] .
+  eq in              (X:LabelList)        ~a in              (Y:LabelList)        = true [variant] .
+  eq out             (X:LabelList)        ~a out             (Y:LabelList)        = true [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a mem-in          (Y:MaybeLabel)       = true [variant] .
+  eq mem-out         (X:MaybeLabel)       ~a mem-out         (Y:MaybeLabel)       = true [variant] .
+  eq nic-in          (X:LabelList)        ~a nic-in          (Y:LabelList)        = true [variant] .
+  eq nic-out         (X:LabelSet)         ~a nic-out         (Y:LabelSet)         = true [variant] .
+  eq msgPolicy       (X:PolicySet)        ~a msgPolicy       (Y:PolicySet)        = true [variant] .
+  eq nextNPN         (X:Nat)              ~a nextNPN         (Y:Nat)              = true [variant] .
+  eq handledCurrently(X:Message?)         ~a handledCurrently(Y:Message?)         = true [variant] .
+  eq weblabels       (X:WebProcInfoSet)   ~a weblabels       (Y:WebProcInfoSet)   = true [variant] .
+  eq netlabels       (X:NetProcInfoSet)   ~a netlabels       (Y:NetProcInfoSet)   = true [variant] .
+  eq displayedTopBar (X:Label)            ~a displayedTopBar (Y:Label)            = true [variant] .
+  eq displayedContent(X:Label)            ~a displayedContent(Y:Label)            = true [variant] .
+  eq activeWebapp    (X:WebProcId)        ~a activeWebapp    (Y:WebProcId)        = true [variant] .
+
+  eq fromKernel      (X:MaybeMessageList) ~a toKernel        (Y:MaybeMessageList) = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a nextWPN         (Y:Nat)              = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a rendered        (Y:MaybeLabel)       = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a URL             (Y:Label)            = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a loading         (Y:Bool)             = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a returnTo        (Y:MaybeConcPipeId)  = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a in              (Y:LabelList)        = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a out             (Y:LabelList)        = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a mem-in          (Y:MaybeLabel)       = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a mem-out         (Y:MaybeLabel)       = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a displayedContent(Y:Label)            = false [variant] .
+  eq fromKernel      (X:MaybeMessageList) ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq toKernel        (X:MaybeMessageList) ~a nextWPN         (Y:Nat)              = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a rendered        (Y:MaybeLabel)       = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a URL             (Y:Label)            = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a loading         (Y:Bool)             = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a returnTo        (Y:MaybeConcPipeId)  = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a in              (Y:LabelList)        = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a out             (Y:LabelList)        = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a mem-in          (Y:MaybeLabel)       = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a mem-out         (Y:MaybeLabel)       = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a displayedContent(Y:Label)            = false [variant] .
+  eq toKernel        (X:MaybeMessageList) ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq nextWPN         (X:Nat)              ~a rendered        (Y:MaybeLabel)       = false [variant] .
+  eq nextWPN         (X:Nat)              ~a URL             (Y:Label)            = false [variant] .
+  eq nextWPN         (X:Nat)              ~a loading         (Y:Bool)             = false [variant] .
+  eq nextWPN         (X:Nat)              ~a returnTo        (Y:MaybeConcPipeId)  = false [variant] .
+  eq nextWPN         (X:Nat)              ~a in              (Y:LabelList)        = false [variant] .
+  eq nextWPN         (X:Nat)              ~a out             (Y:LabelList)        = false [variant] .
+  eq nextWPN         (X:Nat)              ~a mem-in          (Y:MaybeLabel)       = false [variant] .
+  eq nextWPN         (X:Nat)              ~a mem-out         (Y:MaybeLabel)       = false [variant] .
+  eq nextWPN         (X:Nat)              ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq nextWPN         (X:Nat)              ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq nextWPN         (X:Nat)              ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq nextWPN         (X:Nat)              ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq nextWPN         (X:Nat)              ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq nextWPN         (X:Nat)              ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq nextWPN         (X:Nat)              ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq nextWPN         (X:Nat)              ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq nextWPN         (X:Nat)              ~a displayedContent(Y:Label)            = false [variant] .
+  eq nextWPN         (X:Nat)              ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq rendered        (X:MaybeLabel)       ~a URL             (Y:Label)            = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a loading         (Y:Bool)             = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a returnTo        (Y:MaybeConcPipeId)  = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a in              (Y:LabelList)        = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a out             (Y:LabelList)        = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a mem-in          (Y:MaybeLabel)       = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a mem-out         (Y:MaybeLabel)       = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a displayedContent(Y:Label)            = false [variant] .
+  eq rendered        (X:MaybeLabel)       ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq URL             (X:Label)            ~a loading         (Y:Bool)             = false [variant] .
+  eq URL             (X:Label)            ~a returnTo        (Y:MaybeConcPipeId)  = false [variant] .
+  eq URL             (X:Label)            ~a in              (Y:LabelList)        = false [variant] .
+  eq URL             (X:Label)            ~a out             (Y:LabelList)        = false [variant] .
+  eq URL             (X:Label)            ~a mem-in          (Y:MaybeLabel)       = false [variant] .
+  eq URL             (X:Label)            ~a mem-out         (Y:MaybeLabel)       = false [variant] .
+  eq URL             (X:Label)            ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq URL             (X:Label)            ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq URL             (X:Label)            ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq URL             (X:Label)            ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq URL             (X:Label)            ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq URL             (X:Label)            ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq URL             (X:Label)            ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq URL             (X:Label)            ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq URL             (X:Label)            ~a displayedContent(Y:Label)            = false [variant] .
+  eq URL             (X:Label)            ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq loading         (X:Bool)             ~a returnTo        (Y:MaybeConcPipeId)  = false [variant] .
+  eq loading         (X:Bool)             ~a in              (Y:LabelList)        = false [variant] .
+  eq loading         (X:Bool)             ~a out             (Y:LabelList)        = false [variant] .
+  eq loading         (X:Bool)             ~a mem-in          (Y:MaybeLabel)       = false [variant] .
+  eq loading         (X:Bool)             ~a mem-out         (Y:MaybeLabel)       = false [variant] .
+  eq loading         (X:Bool)             ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq loading         (X:Bool)             ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq loading         (X:Bool)             ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq loading         (X:Bool)             ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq loading         (X:Bool)             ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq loading         (X:Bool)             ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq loading         (X:Bool)             ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq loading         (X:Bool)             ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq loading         (X:Bool)             ~a displayedContent(Y:Label)            = false [variant] .
+  eq loading         (X:Bool)             ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq returnTo        (X:MaybeConcPipeId)  ~a in              (Y:LabelList)        = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a out             (Y:LabelList)        = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a mem-in          (Y:MaybeLabel)       = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a mem-out         (Y:MaybeLabel)       = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a displayedContent(Y:Label)            = false [variant] .
+  eq returnTo        (X:MaybeConcPipeId)  ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq in              (X:LabelList)        ~a out             (Y:LabelList)        = false [variant] .
+  eq in              (X:LabelList)        ~a mem-in          (Y:MaybeLabel)       = false [variant] .
+  eq in              (X:LabelList)        ~a mem-out         (Y:MaybeLabel)       = false [variant] .
+  eq in              (X:LabelList)        ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq in              (X:LabelList)        ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq in              (X:LabelList)        ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq in              (X:LabelList)        ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq in              (X:LabelList)        ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq in              (X:LabelList)        ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq in              (X:LabelList)        ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq in              (X:LabelList)        ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq in              (X:LabelList)        ~a displayedContent(Y:Label)            = false [variant] .
+  eq in              (X:LabelList)        ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq out             (X:LabelList)        ~a mem-in          (Y:MaybeLabel)       = false [variant] .
+  eq out             (X:LabelList)        ~a mem-out         (Y:MaybeLabel)       = false [variant] .
+  eq out             (X:LabelList)        ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq out             (X:LabelList)        ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq out             (X:LabelList)        ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq out             (X:LabelList)        ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq out             (X:LabelList)        ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq out             (X:LabelList)        ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq out             (X:LabelList)        ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq out             (X:LabelList)        ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq out             (X:LabelList)        ~a displayedContent(Y:Label)            = false [variant] .
+  eq out             (X:LabelList)        ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq mem-in          (X:MaybeLabel)       ~a mem-out         (Y:MaybeLabel)       = false [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a displayedContent(Y:Label)            = false [variant] .
+  eq mem-in          (X:MaybeLabel)       ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq mem-out         (X:MaybeLabel)       ~a nic-in          (Y:LabelList)        = false [variant] .
+  eq mem-out         (X:MaybeLabel)       ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq mem-out         (X:MaybeLabel)       ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq mem-out         (X:MaybeLabel)       ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq mem-out         (X:MaybeLabel)       ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq mem-out         (X:MaybeLabel)       ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq mem-out         (X:MaybeLabel)       ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq mem-out         (X:MaybeLabel)       ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq mem-out         (X:MaybeLabel)       ~a displayedContent(Y:Label)            = false [variant] .
+  eq mem-out         (X:MaybeLabel)       ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq nic-in          (X:LabelList)        ~a nic-out         (Y:LabelSet)         = false [variant] .
+  eq nic-in          (X:LabelList)        ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq nic-in          (X:LabelList)        ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq nic-in          (X:LabelList)        ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq nic-in          (X:LabelList)        ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq nic-in          (X:LabelList)        ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq nic-in          (X:LabelList)        ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq nic-in          (X:LabelList)        ~a displayedContent(Y:Label)            = false [variant] .
+  eq nic-in          (X:LabelList)        ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq nic-out         (X:LabelSet)         ~a msgPolicy       (Y:PolicySet)        = false [variant] .
+  eq nic-out         (X:LabelSet)         ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq nic-out         (X:LabelSet)         ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq nic-out         (X:LabelSet)         ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq nic-out         (X:LabelSet)         ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq nic-out         (X:LabelSet)         ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq nic-out         (X:LabelSet)         ~a displayedContent(Y:Label)            = false [variant] .
+  eq nic-out         (X:LabelSet)         ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq msgPolicy       (X:PolicySet)        ~a nextNPN         (Y:Nat)              = false [variant] .
+  eq msgPolicy       (X:PolicySet)        ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq msgPolicy       (X:PolicySet)        ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq msgPolicy       (X:PolicySet)        ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq msgPolicy       (X:PolicySet)        ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq msgPolicy       (X:PolicySet)        ~a displayedContent(Y:Label)            = false [variant] .
+  eq msgPolicy       (X:PolicySet)        ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq nextNPN         (X:Nat)              ~a handledCurrently(Y:Message?)         = false [variant] .
+  eq nextNPN         (X:Nat)              ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq nextNPN         (X:Nat)              ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq nextNPN         (X:Nat)              ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq nextNPN         (X:Nat)              ~a displayedContent(Y:Label)            = false [variant] .
+  eq nextNPN         (X:Nat)              ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq handledCurrently(X:Message?)         ~a weblabels       (Y:WebProcInfoSet)   = false [variant] .
+  eq handledCurrently(X:Message?)         ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq handledCurrently(X:Message?)         ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq handledCurrently(X:Message?)         ~a displayedContent(Y:Label)            = false [variant] .
+  eq handledCurrently(X:Message?)         ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq weblabels       (X:WebProcInfoSet)   ~a netlabels       (Y:NetProcInfoSet)   = false [variant] .
+  eq weblabels       (X:WebProcInfoSet)   ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq weblabels       (X:WebProcInfoSet)   ~a displayedContent(Y:Label)            = false [variant] .
+  eq weblabels       (X:WebProcInfoSet)   ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq netlabels       (X:NetProcInfoSet)   ~a displayedTopBar (Y:Label)            = false [variant] .
+  eq netlabels       (X:NetProcInfoSet)   ~a displayedContent(Y:Label)            = false [variant] .
+  eq netlabels       (X:NetProcInfoSet)   ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq displayedTopBar (X:Label)            ~a displayedContent(Y:Label)            = false [variant] .
+  eq displayedTopBar (X:Label)            ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  eq displayedContent(X:Label)            ~a activeWebapp    (Y:WebProcId)        = false [variant] .
+
+  --- 19. Add partially FVP in-attrset?(_|_) predicate for checking if an attribute of a given type exists in an attribute set
+  op in-attrset?(_|_) : Attribute AttributeSet -> Bool [metadata "104 true"] .
+  eq in-attrset?(fromKernel      (X:MaybeMessageList) | (fromKernel      (Y:MaybeMessageList), AS)) = true [variant] .
+  eq in-attrset?(toKernel        (X:MaybeMessageList) | (toKernel        (Y:MaybeMessageList), AS)) = true [variant] .
+  eq in-attrset?(nextWPN         (X:Nat)              | (nextWPN         (Y:Nat),              AS)) = true [variant] .
+  eq in-attrset?(rendered        (X:MaybeLabel)       | (rendered        (Y:MaybeLabel),       AS)) = true [variant] .
+  eq in-attrset?(URL             (X:Label)            | (URL             (Y:Label),            AS)) = true [variant] .
+  eq in-attrset?(loading         (X:Bool)             | (loading         (Y:Bool),             AS)) = true [variant] .
+  eq in-attrset?(returnTo        (X:MaybeConcPipeId)  | (returnTo        (Y:MaybeConcPipeId),  AS)) = true [variant] .
+  eq in-attrset?(in              (X:LabelList)        | (in              (Y:LabelList),        AS)) = true [variant] .
+  eq in-attrset?(out             (X:LabelList)        | (out             (Y:LabelList),        AS)) = true [variant] .
+  eq in-attrset?(mem-in          (X:MaybeLabel)       | (mem-in          (Y:MaybeLabel),       AS)) = true [variant] .
+  eq in-attrset?(mem-out         (X:MaybeLabel)       | (mem-out         (Y:MaybeLabel),       AS)) = true [variant] .
+  eq in-attrset?(nic-in          (X:LabelList)        | (nic-in          (Y:LabelList),        AS)) = true [variant] .
+  eq in-attrset?(nic-out         (X:LabelSet)         | (nic-out         (Y:LabelSet),         AS)) = true [variant] .
+  eq in-attrset?(msgPolicy       (X:PolicySet)        | (msgPolicy       (Y:PolicySet),        AS)) = true [variant] .
+  eq in-attrset?(nextNPN         (X:Nat)              | (nextNPN         (Y:Nat),              AS)) = true [variant] .
+  eq in-attrset?(handledCurrently(X:Message?)         | (handledCurrently(Y:Message?),         AS)) = true [variant] .
+  eq in-attrset?(weblabels       (X:WebProcInfoSet)   | (weblabels       (Y:WebProcInfoSet),   AS)) = true [variant] .
+  eq in-attrset?(netlabels       (X:NetProcInfoSet)   | (netlabels       (Y:NetProcInfoSet),   AS)) = true [variant] .
+  eq in-attrset?(displayedTopBar (X:Label)            | (displayedTopBar (Y:Label),            AS)) = true [variant] .
+  eq in-attrset?(displayedContent(X:Label)            | (displayedContent(Y:Label),            AS)) = true [variant] .
+  eq in-attrset?(activeWebapp    (X:WebProcId)        | (activeWebapp    (Y:WebProcId),        AS)) = true [variant] .
+ ceq in-attrset?(A | A', AS) = in-attrset?(A | AS) if A ~a A' = false .
+  eq in-attrset?(A | none)   = false .
+
+  --- 20. Add partially FVP attr-dupl?() predicate for checking if an attribute type occurs twice in a given attribute set
+  op attr-dupl? : AttributeSet -> Bool [metadata "105 true"] .
+  eq attr-dupl?(fromKernel      (X:MaybeMessageList), fromKernel      (Y:MaybeMessageList), AS) = true [variant] .
+  eq attr-dupl?(toKernel        (X:MaybeMessageList), toKernel        (Y:MaybeMessageList), AS) = true [variant] .
+  eq attr-dupl?(nextWPN         (X:Nat),              nextWPN         (Y:Nat),              AS) = true [variant] .
+  eq attr-dupl?(rendered        (X:MaybeLabel),       rendered        (Y:MaybeLabel),       AS) = true [variant] .
+  eq attr-dupl?(URL             (X:Label),            URL             (Y:Label),            AS) = true [variant] .
+  eq attr-dupl?(loading         (X:Bool),             loading         (Y:Bool),             AS) = true [variant] .
+  eq attr-dupl?(returnTo        (X:MaybeConcPipeId),  returnTo        (Y:MaybeConcPipeId),  AS) = true [variant] .
+  eq attr-dupl?(in              (X:LabelList),        in              (Y:LabelList),        AS) = true [variant] .
+  eq attr-dupl?(out             (X:LabelList),        out             (Y:LabelList),        AS) = true [variant] .
+  eq attr-dupl?(mem-in          (X:MaybeLabel),       mem-in          (Y:MaybeLabel),       AS) = true [variant] .
+  eq attr-dupl?(mem-out         (X:MaybeLabel),       mem-out         (Y:MaybeLabel),       AS) = true [variant] .
+  eq attr-dupl?(nic-in          (X:LabelList),        nic-in          (Y:LabelList),        AS) = true [variant] .
+  eq attr-dupl?(nic-out         (X:LabelSet),         nic-out         (Y:LabelSet),         AS) = true [variant] .
+  eq attr-dupl?(msgPolicy       (X:PolicySet),        msgPolicy       (Y:PolicySet),        AS) = true [variant] .
+  eq attr-dupl?(nextNPN         (X:Nat),              nextNPN         (Y:Nat),              AS) = true [variant] .
+  eq attr-dupl?(handledCurrently(X:Message?),         handledCurrently(Y:Message?),         AS) = true [variant] .
+  eq attr-dupl?(weblabels       (X:WebProcInfoSet),   weblabels       (Y:WebProcInfoSet),   AS) = true [variant] .
+  eq attr-dupl?(netlabels       (X:NetProcInfoSet),   netlabels       (Y:NetProcInfoSet),   AS) = true [variant] .
+  eq attr-dupl?(displayedTopBar (X:Label),            displayedTopBar (Y:Label),            AS) = true [variant] .
+  eq attr-dupl?(displayedContent(X:Label),            displayedContent(Y:Label),            AS) = true [variant] .
+  eq attr-dupl?(activeWebapp    (X:WebProcId),        activeWebapp    (Y:WebProcId),        AS) = true [variant] .
+ ceq attr-dupl?(A,AS) = false if in-attrset?(A | AS) = false /\ attr-dupl?(AS) = false .
+  eq attr-dupl?(none) = false .
+endfm
+
+---
+--- 21. Extract a Label/Pair from a Web/NetProcInfoSet by ProcessId
+--- 22. Find a WebProcId in a WebProcInfoSet via NetProcId and NetProcInfoSet
+--- 23. Check if a label appears in a WebProcInfo in a WebProcInfoSet
+--- 24. Check if a label appears in the first component of a NetProcInfo in a NetProcInfoSet
+--- 25. Check if a WebProc (specified by name or indirectly by NetProcId, NetProcInfoSet, and WebProcInfoSet)
+---     has a loading?() attribute that is set to true
+---
+fmod IBOS-AUX-FVP is
+  pr CONFIGURATION-FVP-EXT .
+  pr LABEL-FVP-EXT .
+  pr MSG-FVP-EXT .
+  pr KERNEL-METADATA-FVP-EXT .
+  pr ATTRIBUTE-FVP-EXT .
+
+  var P? : ProcessId .
+  var P : ConcProcId .
+  var PP PP' : ConcPipeId .
+  var MP MP' : MaybePipeId .
+  var AP : AbsPipeId .
+  var WP : ConcWebProcId .
+  var NP NP' : ConcNetProcId .
+  var NN : NullProcId .
+  var SP : NonPipeId .
+
+  var C : Configuration .
+  var At : Attribute .
+  var A : AttributeSet .
+  var WIS : WebProcInfoSet .
+  var NIS : NetProcInfoSet .
+  var IN IN' OUT U R : Label .
+
+  --- 21. Extract a Label/Pair from a Web/NetProcInfoSet by ProcessId
+  op weblabel-by-pid : MaybeProcessId WebProcInfoSet -> MaybeLabel [metadata "121 L:Label"] .
+  eq weblabel-by-pid(WP, (pi(WP,IN),wp WIS)) = IN [variant] .
+ ceq weblabel-by-pid(P?, (pi(WP,IN),wp WIS)) = weblabel-by-pid(P?,WIS) if P? ~p WP = false . --- FIXME: this rule needed to solve problem in ABC proof
+  eq weblabel-by-pid(P?, mtWPIS)             = nolabel .
+  eq weblabel-by-pid(NP, WIS)                = nolabel .
+  eq weblabel-by-pid(ui, WIS)                = nolabel .
+  eq weblabel-by-pid(AP, WIS)                = nolabel .
+  eq weblabel-by-pid(SP, WIS)                = nolabel .
+  eq weblabel-by-pid(NN, WIS)                = nolabel .
+
+  op netlabelpair-by-pid : MaybeProcessId NetProcInfoSet -> MaybeLabelPair [metadata "122 L:LabelPair"] .
+  eq netlabelpair-by-pid(NP, (pi(NP,IN,OUT),np NIS)) = (IN,OUT) [variant] .
+ ceq netlabelpair-by-pid(P?, (pi(NP,IN,OUT),np NIS)) = netlabelpair-by-pid(P?,NIS) if P? ~p NP = false .
+  eq netlabelpair-by-pid(P?, mtNPIS)                 = nopair .
+  eq netlabelpair-by-pid(WP, NIS)                    = nopair .
+  eq netlabelpair-by-pid(ui, NIS)                    = nopair .
+  eq netlabelpair-by-pid(AP, NIS)                    = nopair .
+  eq netlabelpair-by-pid(SP, NIS)                    = nopair .
+  eq netlabelpair-by-pid(NN, NIS)                    = nopair .
+
+  --- 22. Find a WebProcId in a WebProcInfoSet via NetProcId and NetProcInfoSet
+  op webprocid-by-np : ConcNetProcId NetProcInfoSet WebProcInfoSet -> MaybeConcWebProcId [metadata "128 W:WebProcId"] .
+  eq webprocid-by-np(NP,pi(NP ,IN,OUT),np NIS,pi(WP,IN),wp WIS) = WP [variant] .
+ ceq webprocid-by-np(NP,pi(NP',IN,OUT),np NIS,             WIS) = none if NP ~p NP'                 = false /\ webprocid-by-np(NP,NIS,WIS) = none .
+ ceq webprocid-by-np(NP,pi(NP ,IN,OUT),np NIS,             WIS) = none if lbl-in-weblabels?(IN,WIS) = false /\ webprocid-by-np(NP,NIS,WIS) = none .
+ ceq webprocid-by-np(NP,                  NIS,             WIS) = none if netlabelpair-by-pid(NP,NIS) = nopair .
+  eq webprocid-by-np(NP,               mtNPIS,             WIS) = none .
+  eq webprocid-by-np(NP,                  NIS,          mtWPIS) = none .
+
+  --- 23. Check if a label appears in a WebProcInfo in a WebProcInfoSet
+  op lbl-in-weblabels? : Label WebProcInfoSet -> Bool [metadata "119 true"] .
+  eq lbl-in-weblabels?(IN,(pi(WP,IN ),wp WIS)) = true [variant] .
+ ceq lbl-in-weblabels?(IN,(pi(WP,IN'),wp WIS)) = lbl-in-weblabels?(IN,WIS) if IN ~l IN' = false .
+  eq lbl-in-weblabels?(IN,mtWPIS)              = false .
+
+  --- 24. Check if a label appears in the first component of a NetProcInfo in a NetProcInfoSet
+  op np-by-inlbl? : Label NetProcInfoSet -> Bool [metadata "134 true"] .
+  eq np-by-inlbl?(IN,pi(NP,IN, OUT),np NIS) = true [variant] .
+ ceq np-by-inlbl?(IN,pi(NP,IN',OUT),np NIS) = np-by-inlbl?(IN,NIS) if IN ~l IN' = false .
+  eq np-by-inlbl?(IN,               mtNPIS) = false .
+
+  --- 25. Check if a WebProc (specified by name or indirectly by NetProcId, NetProcInfoSet, and WebProcInfoSet)
+  ---     has a loading?() attribute that is set to true
+  op proc-loaded? : MaybePipeId MaybePipeId NetProcInfoSet WebProcInfoSet Configuration -> Bool [metadata "133 true"] .
+  --- true if loaded proc exists and is matched by netproc
+  eq proc-loaded?(NN,WP,                  NIS,             WIS,< WP | loading(true), A > C) = true  [variant] .
+  eq proc-loaded?(NP,NN, pi(NP,IN,OUT),np NIS,pi(WP,IN),wp WIS,< WP | loading(true), A > C) = true  [variant] .
+  eq proc-loaded?(NP,WP, pi(NP,IN,OUT),np NIS,pi(WP,IN),wp WIS,< WP | loading(true), A > C) = true  [variant] .
+  --- discard attributes
+ ceq proc-loaded?(MP,MP',                 NIS,             WIS,< WP | At, A > C) = proc-loaded?(MP,MP',NIS,WIS,< WP | A > C) if loading(true) ~a At = false .
+  --- discard processes
+ ceq proc-loaded?(MP,MP',                 NIS,             WIS,< WP | A > C) = proc-loaded?(MP,MP',NIS,WIS,C) if in-attrset?(loading(true) | A) = false .
+ ceq proc-loaded?(MP,MP',                 NIS,             WIS,< WP | A > C) = proc-loaded?(MP,MP',NIS,WIS,C) if weblabel-by-pid(WP,WIS) = nolabel .
+  eq proc-loaded?(MP,MP',                 NIS,             WIS,< NP | A > C) = proc-loaded?(MP,MP',NIS,WIS,C) .
+  eq proc-loaded?(MP,MP',                 NIS,             WIS,< ui | A > C) = proc-loaded?(MP,MP',NIS,WIS,C) .
+  eq proc-loaded?(MP,MP',                 NIS,             WIS,< SP | A > C) = proc-loaded?(MP,MP',NIS,WIS,C) .
+  --- discard WebProcInfo
+ ceq proc-loaded?(MP,MP',                 NIS,pi(WP,IN),wp WIS, C) = proc-loaded?(MP,MP',NIS,WIS,C) if np-by-inlbl?(IN,NIS) = false .
+ ceq proc-loaded?(MP,MP',                 NIS,pi(WP,IN),wp WIS, C) = proc-loaded?(MP,MP',NIS,WIS,C) if in-conf?(WP,C) = false .
+  --- discard NetProcInfo
+ ceq proc-loaded?(MP,MP',pi(NP,IN,OUT),np NIS,             WIS, C) = proc-loaded?(MP,MP',NIS,WIS,C) if MP ~p NP = false .
+ ceq proc-loaded?(MP,MP',pi(NP,IN,OUT),np NIS,             WIS, C) = proc-loaded?(MP,MP',NIS,WIS,C) if lbl-in-weblabels?(IN,WIS) = false .
+  --- false if we cannot find our webproc in the configuration
+ ceq proc-loaded?(MP,WP,                  NIS,             WIS, C) = false if in-conf?(WP,C) = false .
+  --- false if we cannot find our netproc in metadata
+ ceq proc-loaded?(NP,MP',                 NIS,             WIS, C) = false if netlabelpair-by-pid(NP,NIS) = nopair .
+  --- false if our webproc cannot possibly match up with our netproc
+ ceq proc-loaded?(NP,WP,                  NIS,             WIS, C) = false if weblabel-by-pid(WP,WIS) = nolabel .
+  --- false if our netproc id is wrong
+  eq proc-loaded?(WP,MP',                 NIS,             WIS, C) = false .
+  eq proc-loaded?(ui,MP',                 NIS,             WIS, C) = false .
+  eq proc-loaded?(AP,MP',                 NIS,             WIS, C) = false .
+  --- false if our webproc id is wrong
+  eq proc-loaded?(MP,NP,                  NIS,             WIS, C) = false .
+  eq proc-loaded?(MP,ui,                  NIS,             WIS, C) = false .
+  eq proc-loaded?(MP,AP,                  NIS,             WIS, C) = false .
+  --- false if both ids are none
+  eq proc-loaded?(NN,NN,                  NIS,             WIS, C) = false .
+endfm
+
+---
+--- This module defines neeeded FVP predicates for specifying the same-origin policy (SOP) invariant
+---
+fmod IBOS-SOP-PRED-FVP is
+  pr IBOS-AUX-FVP .
+endfm
+
+---
+--- This module defines neeeded FVP predicates for specifying the address bar correctness (ABC) invariant
+--- ABC-1. check that the rendered() and URL() attributes of each WebProc agree --- called R() in the paper
+--- ABC-2. check that the display and address bar are consistent with the rendered() and URL() attributes of the active WebProc
+---        [this is the intersection of properties 9 and 10 in the IBOS paper]
+---
+fmod IBOS-ABC-PRED-FVP is
+  pr IBOS-AUX-FVP .
+
+  var WP  : ConcWebProcId .
+  var P   : ConcProcId .
+  var U R : Label .
+  var A   : AttributeSet .
+  var C   : Configuration .
+
+  --- ABC-1. check that the rendered() and URL() attributes of each WebProc agree --- called R() in the paper
+  op webapp-url-render : ConcWebProcId Configuration -> MaybeLabelPair [metadata "136 L:LabelPair"] .
+  eq webapp-url-render(WP,< WP | URL(U), rendered(R), A > C) = (U,R) [variant] .
+ ceq webapp-url-render(WP,< P  |                      A > C) = webapp-url-render(WP,C) if WP ~p P = false .
+  eq webapp-url-render(WP,                             none) = nopair .
+ ceq webapp-url-render(WP,< WP |                      A > C) = nopair if in-attrset?(URL(about-blank) | A) and in-attrset?(rendered(about-blank) | A) = false /\ webapp-url-render(WP,C) = nopair .
+
+  --- ABC-2. check that the display and address bar are consistent with the rendered() and URL() attributes of the active WebProc
+  ---        [this is the intersection of properties P_9 and P_10 in the IBOS paper]
+  op display-topbar-consistent? : ConcWebProcId Label Label Configuration -> Bool [metadata "137 true"] .
+  eq display-topbar-consistent?(WP,about-blank,U,< WP |              URL(U), A > C) = true [variant] .
+  eq display-topbar-consistent?(WP,R,U,          < WP | rendered(R), URL(U), A > C) = true [variant] .
+ ceq display-topbar-consistent?(WP,R,U,          < P  |                      A > C) = display-topbar-consistent?(WP,R,U,C) if WP ~p P = false .
+ ceq display-topbar-consistent?(WP,R,U,          < WP |                      A > C) = display-topbar-consistent?(WP,R,U,C) if                             in-attrset?(URL(about-blank)      | A) = false .
+ ceq display-topbar-consistent?(WP,R,U,          < WP |                      A > C) = display-topbar-consistent?(WP,R,U,C) if R ~l about-blank = false /\ in-attrset?(rendered(about-blank) | A) = false .
+  eq display-topbar-consistent?(WP,R,U,                                       none) = false .
+endfm
+
+fmod IBOS-PREDS-FVP is
+  pr IBOS-SOP-PRED-FVP .
+  pr IBOS-ABC-PRED-FVP .
+endfm
+
+---
+--- NON-FVP
+---
+
+---
+--- 26. Canonicalizes attribute values so attribute types can be compared by standard equality
+--- 27. Checks that each kind of attribute in an attribute set appears in a different set
+---
+fmod ATTRIBUTE-NONFVP-EXT is
+  pr ATTRIBUTE-FVP-EXT .
+  var A A' : Attribute . var AS AS' : AttributeSet .
+
+  --- 26. Canonicalizes attribute values so attribute types can be compared by standard equality
+  op _!a : AttributeSet -> AttributeSet [metadata "103"] .
+  eq (fromKernel      (X:MaybeMessageList), AS) !a = fromKernel(mt),                (AS !a) .
+  eq (toKernel        (X:MaybeMessageList), AS) !a = toKernel(mt),                  (AS !a) .
+  eq (nextWPN         (X:Nat),              AS) !a = nextWPN(0),                    (AS !a) .
+  eq (rendered        (X:MaybeLabel),       AS) !a = rendered(about-blank),         (AS !a) .
+  eq (URL             (X:Label),            AS) !a = URL(about-blank),              (AS !a) .
+  eq (loading         (X:Bool),             AS) !a = loading(true),                 (AS !a) .
+  eq (returnTo        (X:MaybeConcPipeId),  AS) !a = returnTo(ui),                  (AS !a) .
+  eq (in              (X:LabelList),        AS) !a = in(mtLL),                      (AS !a) .
+  eq (out             (X:LabelList),        AS) !a = out(mtLL),                     (AS !a) .
+  eq (mem-in          (X:MaybeLabel),       AS) !a = mem-in(nolabel),               (AS !a) .
+  eq (mem-out         (X:MaybeLabel),       AS) !a = mem-out(nolabel),              (AS !a) .
+  eq (nic-in          (X:LabelList),        AS) !a = nic-in(mtLL),                  (AS !a) .
+  eq (nic-out         (X:LabelSet),         AS) !a = nic-out(mtLS),                 (AS !a) .
+  eq (msgPolicy       (X:PolicySet),        AS) !a = msgPolicy(mtPS),               (AS !a) .
+  eq (nextNPN         (X:Nat),              AS) !a = nextNPN(0),                    (AS !a) .
+  eq (handledCurrently(X:Message?),         AS) !a = handledCurrently(none),        (AS !a) .
+  eq (weblabels       (X:WebProcInfoSet),   AS) !a = weblabels(mtWPIS),             (AS !a) .
+  eq (netlabels       (X:NetProcInfoSet),   AS) !a = netlabels(mtNPIS),             (AS !a) .
+  eq (displayedTopBar (X:Label),            AS) !a = displayedTopBar(about-blank),  (AS !a) .
+  eq (displayedContent(X:Label),            AS) !a = displayedContent(about-blank), (AS !a) .
+  eq (activeWebapp    (X:WebProcId),        AS) !a = activeWebapp(webapp(0)),       (AS !a) .
+  eq none !a = none .
+  eq (AS !a) !a = AS !a .
+
+  --- 27. Checks that each kind of attribute in an attribute set appears in a different set
+  op attr-subset?(_|_) : AttributeSet AttributeSet -> Bool [metadata "106"] .
+ ceq attr-subset?(A, AS | AS') = attr-subset?(AS | AS') if in-attrset?(A | AS') .
+ ceq attr-subset?(A, AS | AS') = false                  if in-attrset?(A | AS') = false .
+  eq attr-subset?(none  | AS') = true .
+endfm
+
+---
+--- 28. Lemmas for some FVP symbols
+--- 29. Canonicalize all attribute values in all objects in Configuration
+--- 30. Check that given Net/WebProcId is greater than all those in the Configuration
+--- 31. Return true iff an attribute type is duplicated in some object in the Configuration
+--- 32. Return true iff all Net/WebProcs in a Configuration have their required attributes (part of WF() predicate in paper)
+--- 33. Check that there are no duplicate ProcessIds in a Web/NetProcInfoSet
+--- 34. Check that given Net/WebProcId is greater than all those in the Net/WebProcInfoSet
+--- 35. Check if a given Label occurs as first component in some NetProcInfo in a NetProcInfoSet
+--- 36. Given a Net/WebProcId, extract the first/second component of a Net/WebProcInfo in a Net/WebProcInfoSet
+--- 37. Check if a given ProcessId appears in a Net/WebProcInfo in a Net/WebProcInfoSet
+--- 38. Check that all of the Net/WebProcs in a Configuration map bijectively to each Net/WebProcInfos in the given Net/WebProcInfoSets
+--- 39. Check that each WebProc and URL() attribute map bijectively to each WebProcInfo in the given WebProcInfoSet
+--- 40. For each NetProcInfo in the NetProcInfoSet, we require that IN and OUT labels match
+--- 41. Check that all Fetch messages in a given message list have unique labels
+---
+fmod IBOS-AUX-NONFVP is
+  pr IBOS-PREDS-FVP .
+  pr KERNEL-POLICIES-NONFVP .
+  pr ATTRIBUTE-NONFVP-EXT .
+
+  var W N M : Nat .
+  var Z     : NzNat .
+
+  var C C' : Configuration .
+  var NC : NeConfiguration .
+
+  var At At' : Attribute .
+  var A A'   : AttributeSet .
+  var NA     : NeAttributeSet .
+
+  var P?     : ProcessId .
+  var P P'   : ConcProcId .
+  var PP PP' : PipeId    .
+  var NPP    : NonPipeId .
+  var NP NP' : ConcNetProcId .
+  var NNP    : NonNetPipeId .
+  var WP WP' : ConcWebProcId .
+  var NWP    : NonWebPipeId .
+  var NNWP   : NonConcNetWebProcId .
+
+  var NIS  : NetProcInfoSet .
+  var WIS  : WebProcInfoSet .
+  var NWIS : NeWebProcInfoSet .
+  var NNIS : NeNetProcInfoSet .
+
+  var B : Bool .
+  var RetMT : RetMsgType .
+  var FetchMT : FetchMsgType .
+  var MSGL MSGL2 : MessageList .
+  var L L' L1 L2 IN OUT : Label .
+
+  --- 28. Lemmas for some FVP symbols
+  eq attr-dupl?((A !a), A') = attr-dupl?(A, A') .
+  eq in-attrset?(At | (A !a), A') = in-attrset?(At | A, A') .
+ ceq in-conf?(NP,C) = false if fresh-np-id?(NP,C) = true .
+ ceq in-conf?(WP,C) = false if fresh-wp-id?(WP,C) = true .
+ ceq in-conf?(WP,C) = false if webapp-url-render(WP,C) = nopair .
+  eq conf-dupl?(< P | NA > C) = conf-dupl?(< P | none > C) .
+ ceq weblabel-by-pid(WP,WIS) = nolabel if fresh-weblabel?(WP,WIS) .
+ ceq netlabelpair-by-pid(NP,NIS) = nopair if fresh-netlabel?(NP,NIS) .
+
+  --- 29. Canonicalize all attribute values in all objects in Configuration
+  op _!c : Configuration -> Configuration       [metadata "107"] .
+  op _!c : NetWebProcConfig -> NetWebProcConfig [metadata "107"] .
+  eq (< P | A > C) !c = < P | A !a > (C !c) .
+  eq none          !c = none .
+
+  --- 30. Check that given Net/WebProcId is greater than all those in the Configuration
+  op fresh-np-id? : ConcNetProcId Configuration -> Bool [metadata "110"] .
+  eq fresh-np-id?(network(N    ), < network(N + M) | A  > C) = false .
+  eq fresh-np-id?(network(N + Z), < network(N)     | A  > C) = fresh-np-id?(network(N + Z),C) .
+  eq fresh-np-id?(NP,             none                     ) = true .
+  eq fresh-np-id?(NP,             < N:NonNetPipeId | A  > C) = fresh-np-id?(NP,C) .
+  eq fresh-np-id?(NP,             < NPP            | A  > C) = fresh-np-id?(NP,C) .
+  eq fresh-np-id?(NP,             < P              | NA > C) = fresh-np-id?(NP, < P | none > C) .
+ ceq fresh-np-id?(network(N + 1),                         C) = true if fresh-np-id?(network(N),C) .
+
+  op fresh-wp-id? : ConcWebProcId Configuration -> Bool [metadata "111"] .
+  eq fresh-wp-id?(webapp(N    ), < webapp(N + M)  | A  > C) = false .
+  eq fresh-wp-id?(webapp(N + Z), < webapp(N)      | A  > C) = fresh-wp-id?(webapp(N + Z),C) .
+  eq fresh-wp-id?(WP,            none                     ) = true .
+  eq fresh-wp-id?(WP,            < N:NonWebPipeId | A  > C) = fresh-wp-id?(WP,C) .
+  eq fresh-wp-id?(WP,            < NPP            | A  > C) = fresh-wp-id?(WP,C) .
+  eq fresh-wp-id?(WP,            < P              | NA > C) = fresh-wp-id?(WP, < P | none > C) .
+ ceq fresh-wp-id?(webapp(N + 1),                         C) = true if fresh-wp-id?(webapp(N),C) .
+
+  --- 31. Return true iff an attribute type is duplicated in some object in the Configuration
+  op conf-attr-dupl? : Configuration -> Bool [metadata "112"] .
+ ceq conf-attr-dupl?(< P | At, At', A > C) = conf-attr-dupl?(< P | A > C) if At ~a At' = false /\ attr-dupl?(At, A) = false /\ attr-dupl?(At', A) = false .
+  eq conf-attr-dupl?(< P | At         > C) = conf-attr-dupl?(          C) .
+  eq conf-attr-dupl?(< P | none       > C) = conf-attr-dupl?(          C) .
+ ceq conf-attr-dupl?(< P |          A > C) = true                         if attr-dupl?(A) .
+  eq conf-attr-dupl?(none)                 = false .
+
+  --- 32. Return true iff all Net/WebProcs in a Configuration have their required attributes (part of WF() predicate in paper)
+  op nwp-reqattrs? : NetWebProcConfig -> Bool [metadata "114"] .
+  eq nwp-reqattrs?(< NP | toKernel(TK:MessageList), fromKernel(FK:MessageList), returnTo(P:MaybeConcPipeId), mem-in(M1:MaybeLabel), mem-out(M2:MaybeLabel), A > C)
+   = nwp-reqattrs?(C) .
+  eq nwp-reqattrs?(< WP | toKernel(TK:MessageList), fromKernel(FK:MessageList), URL(L1:Label), rendered(L2:MaybeLabel), loading(B:Bool), A > C)
+   = nwp-reqattrs?(C) .
+ ceq nwp-reqattrs?(< NP | A > C) = false if attr-subset?(toKernel(mt),fromKernel(mt),returnTo(ui),mem-in(nolabel),mem-out(nolabel)        | A) = false .
+ ceq nwp-reqattrs?(< WP | A > C) = false if attr-subset?(toKernel(mt),fromKernel(mt),URL(about-blank),rendered(about-blank),loading(true) | A) = false .
+  eq nwp-reqattrs?(none) = true .
+
+  --- 33. Check that there are no duplicate ProcessIds in a Web/NetProcInfoSet
+  op weblabels-dupl? : WebProcInfoSet -> Bool [metadata "115"] .
+  eq weblabels-dupl?(pi(WP,L) ,wp pi(WP,L') ,wp WIS) = true .
+ ceq weblabels-dupl?(pi(WP,L)               ,wp WIS) = weblabels-dupl?(WIS) if pid-in-weblabels?(WP,WIS) = false .
+  eq weblabels-dupl?(pi(WP,L))                       = false .
+  eq weblabels-dupl?(mtWPIS)                         = false .
+
+  op netlabels-dupl? : NetProcInfoSet -> Bool [metadata "116"] .
+  eq netlabels-dupl?(pi(NP,L,L') ,np pi(NP,L1,L2) ,np NIS) = true .
+ ceq netlabels-dupl?(pi(NP,L,L') ,np                  NIS) = netlabels-dupl?(NIS) if pid-in-netlabels?(NP,NIS) = false .
+  eq netlabels-dupl?(pi(NP,L,L'))                          = false .
+  eq netlabels-dupl?(mtNPIS)                               = false .
+
+  --- 34. Check that given Net/WebProcId is greater than all those in the Net/WebProcInfoSet
+  op fresh-weblabel? : ConcWebProcId WebProcInfoSet -> Bool [metadata "117"] .
+  eq fresh-weblabel?(webapp(N + Z),(pi(webapp(N    ),L),wp WIS)) = fresh-weblabel?(webapp(N + Z),WIS) .
+  eq fresh-weblabel?(webapp(N),    (pi(webapp(N + M),L),wp WIS)) = false .
+  eq fresh-weblabel?(webapp(N),mtWPIS)                           = true .
+ ceq fresh-weblabel?(webapp(N + Z),WIS)                          = true if fresh-weblabel?(webapp(N),WIS) .
+
+  op fresh-netlabel? : ConcNetProcId NetProcInfoSet -> Bool [metadata "118"] .
+  eq fresh-netlabel?(network(N + Z),(pi(network(N    ),L,L'),np NIS)) = fresh-netlabel?(network(N + Z),NIS) .
+  eq fresh-netlabel?(network(N),    (pi(network(N + M),L,L'),np NIS)) = false .
+  eq fresh-netlabel?(network(N),mtNPIS)                               = true .
+ ceq fresh-netlabel?(network(N + Z),NIS)                              = true if fresh-netlabel?(network(N),NIS) .
+
+  --- 35. Check if a given Label occurs as first component in some NetProcInfo in a NetProcInfoSet
+  op inlbl-in-netlabels? : Label NetProcInfoSet -> Bool [metadata "120"] .
+  eq inlbl-in-netlabels?(IN,(pi(NP,IN,OUT),np NIS)) = true .
+ ceq inlbl-in-netlabels?(L, (pi(NP,IN,OUT),np NIS)) = inlbl-in-netlabels?(L,NIS) if L ~l IN = false .
+  eq inlbl-in-netlabels?(L,mtNPIS)                  = false .
+
+  --- 36. Given a Net/WebProcId, extract the first/second component of a Net/WebProcInfo in a Net/WebProcInfoSet
+  op in-netlabel-by-pid : ProcessId NetProcInfoSet -> MaybeLabel [metadata "123"] .
+  eq in-netlabel-by-pid(P?,NIS) = inlbl(netlabelpair-by-pid(P?,NIS)) .
+
+  op out-netlabel-by-pid : ProcessId NetProcInfoSet -> MaybeLabel [metadata "124"] .
+  eq out-netlabel-by-pid(P?,NIS) = outlbl(netlabelpair-by-pid(P?,NIS)) .
+
+  --- 37. Check if a given ProcessId appears in a Net/WebProcInfo in a Net/WebProcInfoSet
+  op pid-in-netlabels? : ProcessId NetProcInfoSet -> Bool [metadata "125"] .
+ ceq pid-in-netlabels?(P?,NIS) = true  if (netlabelpair-by-pid(P?,NIS) ~lp nopair) = false .
+ ceq pid-in-netlabels?(P?,NIS) = false if (netlabelpair-by-pid(P?,NIS) ~lp nopair) = true  .
+
+  op pid-in-weblabels? : ProcessId WebProcInfoSet -> Bool [metadata "126"] .
+ ceq pid-in-weblabels?(P?,WIS) = true  if (weblabel-by-pid(P?,WIS) ~l nolabel) = false .
+ ceq pid-in-weblabels?(P?,WIS) = false if (weblabel-by-pid(P?,WIS) ~l nolabel) = true  .
+
+  --- 38. Check that all of the Net/WebProcs in a Configuration map bijectively to each Net/WebProcInfos in the given Net/WebProcInfoSets
+  op conf-labels-eqset? : Configuration WebProcInfoSet NetProcInfoSet -> Bool [metadata "127"] .
+  --- throw away useless processes
+  eq conf-labels-eqset?(< ui  | A > C,WIS,NIS) = conf-labels-eqset?(C,WIS,NIS) .
+  eq conf-labels-eqset?(< NPP | A > C,WIS,NIS) = conf-labels-eqset?(C,WIS,NIS) .
+  --- check web/netprocs are compatible
+  eq conf-labels-eqset?(< WP | A > C,(pi(WP,L),wp WIS),                NIS ) = conf-labels-eqset?(C,WIS,NIS) .
+  eq conf-labels-eqset?(< NP | A > C,             WIS, (pi(NP,L,L'),np NIS)) = conf-labels-eqset?(C,WIS,NIS) .
+  --- true termination
+  eq conf-labels-eqset?(none,mtWPIS, mtNPIS) = true  .
+  --- non-recursive failure modes
+  eq conf-labels-eqset?(none,NWIS,   NIS   ) = false .
+  eq conf-labels-eqset?(none,WIS,    NNIS  ) = false .
+  --- recursive failure modes
+ ceq conf-labels-eqset?(< WP | A > C,  WIS,                NIS ) = false if pid-in-weblabels?(WP,WIS) = false .
+ ceq conf-labels-eqset?(< NP | A > C,  WIS,                NIS ) = false if pid-in-netlabels?(NP,NIS) = false .
+ ceq conf-labels-eqset?(C,(pi(WP,L),wp WIS),               NIS ) = false if in-conf?(WP,C)            = false .
+ ceq conf-labels-eqset?(C,             WIS,(pi(NP,L,L'),np NIS)) = false if in-conf?(NP,C)            = false .
+  --- simplification
+  eq conf-labels-eqset?(< P | NA > C,WIS,NIS) = conf-labels-eqset?(< P | none > C,WIS,NIS) .
+
+  --- 39. Check that each WebProc and URL() attribute map bijectively to each WebProcInfo in the given WebProcInfoSet
+  op webapp-url-eqset? : Configuration WebProcInfoSet -> Bool [metadata "138"] .
+  ---
+  eq webapp-url-eqset?(< ui  | A > C,WIS) = webapp-url-eqset?(C,WIS) .
+  eq webapp-url-eqset?(< NPP | A > C,WIS) = webapp-url-eqset?(C,WIS) .
+  eq webapp-url-eqset?(< NP  | A > C,WIS) = webapp-url-eqset?(C,WIS) .
+  ---
+  eq webapp-url-eqset?(< WP | URL(L), A > C,(pi(WP,L ),wp WIS)) = webapp-url-eqset?(C,WIS) .
+  eq webapp-url-eqset?(none,                           mtWPIS ) = true .
+  eq webapp-url-eqset?(NC,                             mtWPIS ) = false .
+  eq webapp-url-eqset?(none,                             NWIS ) = false .
+ ceq webapp-url-eqset?(< WP | URL(L), A > C,(pi(WP,L'),wp WIS)) = false if L ~l L' = false .
+ ceq webapp-url-eqset?(< WP |         A > C,              WIS ) = false if pid-in-weblabels?(WP,WIS) = false .
+ ceq webapp-url-eqset?(                   C,(pi(WP,L ),wp WIS)) = false if in-conf?(WP,C) = false .
+  ---
+  eq webapp-url-eqset?(< WP | toKernel(MSGL),   A > C,WIS) = webapp-url-eqset?(< WP | A > C,WIS) .
+  eq webapp-url-eqset?(< WP | fromKernel(MSGL), A > C,WIS) = webapp-url-eqset?(< WP | A > C,WIS) .
+  eq webapp-url-eqset?(< WP | rendered(L),      A > C,WIS) = webapp-url-eqset?(< WP | A > C,WIS) .
+  eq webapp-url-eqset?(< WP | loading(B),       A > C,WIS) = webapp-url-eqset?(< WP | A > C,WIS) .
+
+  --- 40. For each NetProcInfo in the NetProcInfoSet, we require that IN and OUT labels match
+  op netlabels-match? : NetProcInfoSet -> Bool [metadata "197"] .
+ ceq netlabels-match?(pi(NP,IN,OUT),np NIS) = netlabels-match?(NIS) if IN ~l OUT .
+ ceq netlabels-match?(pi(NP,IN,OUT),np NIS) = false                 if IN ~l OUT = false .
+  eq netlabels-match?(              mtNPIS) = true .
+
+  --- 41. Check that all Fetch messages in a given message list have unique labels
+  op ui-consistent? : MessageList WebProcInfoSet -> Bool [metadata "199"] .
+  --- SWITCH-TAB
+ ceq ui-consistent?(MSGL @ msg(PP,PP',MSG-SWITCH-TAB,OUT) @ MSGL2,WIS) = ui-consistent?(MSGL @ MSGL2,WIS)
+  if pid-in-weblabels?(PP',WIS) .
+ ceq ui-consistent?(MSGL @ msg(PP,PP',MSG-SWITCH-TAB,OUT) @ MSGL2,WIS) = false
+  if pid-in-weblabels?(PP',WIS) = false .
+  --- NEW-URL
+ ceq ui-consistent?(MSGL @ msg(PP,webapp,MSG-NEW-URL,OUT) @ MSGL2,WIS) = ui-consistent?(MSGL @ MSGL2,WIS)
+  if newurl-nodupl?(OUT,MSGL @ MSGL2) .
+ ceq ui-consistent?(MSGL @ msg(PP,PP',MSG-NEW-URL,OUT) @ MSGL2,WIS) = false
+  if PP' ~p webapp and newurl-nodupl?(OUT,MSGL @ MSGL2) = false .
+  --- OTHER MESSAGES
+  eq ui-consistent?(MSGL @ msg(PP,PP',RetMT,  OUT) @ MSGL2,WIS) = false .
+  eq ui-consistent?(MSGL @ msg(PP,PP',FetchMT,OUT) @ MSGL2,WIS) = false .
+  eq ui-consistent?(mt,WIS) = true .
+  --- Simplification of WIS
+ ceq ui-consistent?(MSGL,pi(WP,IN),wp WIS) = true if fresh-weblabel?(WP,WIS) /\ ui-consistent?(MSGL,WIS) .
+endfm
+
+---
+--- This module defines needed Non-FVP predicates for specifying the same-origin (SOP) invariant
+--- SOP-1. Check the same-origin policy (SOP), written `p` for brevity
+---
+fmod IBOS-SOP-PRED is
+  pr IBOS-AUX-NONFVP .
+
+  var B : Bool .
+  var NWC : NetWebProcConfig .
+  var W N NNP NWA : Nat .
+  var A A' : AttributeSet .
+  var WIS : WebProcInfoSet .
+  var NIS : NetProcInfoSet .
+  var ML ML2 : MessageList .
+  var UI : UIId .
+  var NI NI1 NI2 : ConcNetProcId .
+  var WI : ConcWebProcId .
+  var PI PI' : PipeId .
+  var CPI CPI' : ConcPipeId .
+  var L IN OUT OUT1 OUT2 : Label .
+  var LL LL' : LabelList .
+
+  var MT : MsgType .
+  var RetMT : RetMsgType .
+  var FetchMT : FetchMsgType .
+  var NonFetchMT : NonFetchMsgType .
+  var NonRetMT : NonRetMsgType .
+  var NonRFMT : NonRetFetchMsgType .
+  var AMsg : Message .
+
+  var NFL NFL2 : NonFetchMsgList .
+  var HFL HFL2 : HasFetchMsgList .
+  var FM : FetchMsg .
+  var M?  : Message? .
+  var NRM : NonRetMsg .
+  var NFM : NonFetchMsg .
+
+  --- SOP-1. Check the same-origin policy (SOP), written `p` for brevity
+  op p : NetWebProcConfig WebProcInfoSet NetProcInfoSet Message? -> Bool? [metadata "200"] .
+  --- Prop 1 ---
+  --- any FETCH message in fromKernel queue of NetProc, agrees with kernel metadata
+ ceq p(< NI | fromKernel(ML @ msg(PI,PI',MSG-FETCH-URL,OUT) @ ML2), A > NWC,WIS,NIS,M?) =
+     p(< NI | fromKernel(ML @                                 ML2), A > NWC,WIS,NIS,M?)
+  if PI' ~p NI
+  /\ (weblabel-by-pid(PI,WIS),OUT) ~lp netlabelpair-by-pid(NI,NIS)
+  /\ proc-loaded?(NI,PI,NIS,WIS,NWC) .
+
+ ceq p(< NI | fromKernel(ML @ NFM                            @ ML2), A > NWC, WIS, NIS,M?) =
+     p(< NI | fromKernel(ML @                                  ML2), A > NWC, WIS, NIS,M?)
+  if pid-in-netlabels?(NI,NIS) .
+
+ ceq p(< NI | fromKernel(mt),     A > NWC, WIS, NIS, M?) =
+     p(< NI | fromKernel(nolist), A > NWC, WIS, NIS, M?)
+  if pid-in-netlabels?(NI,NIS) .
+
+  --- Prop 1 Negation ---
+ ceq p(< NI | fromKernel(ML @ msg(PI,PI',MSG-FETCH-URL,OUT) @ ML2), A > NWC,WIS,NIS,M?) = false
+  if PI' ~p NI and (weblabel-by-pid(PI,WIS),OUT) ~lp netlabelpair-by-pid(NI,NIS) and proc-loaded?(NI,PI,NIS,WIS,NWC) = false .
+
+  --- Prop 2 ---
+  --- mem-in() attr correlates with kernel metadata
+ ceq p(< NI | mem-in(OUT),      A > NWC,WIS,NIS,M?) =
+     p(< NI | mem-in(nolabel),  A > NWC,WIS,NIS,M?)
+  if out-netlabel-by-pid(NI,NIS) ~l OUT
+  /\ proc-loaded?(NI,none,NIS,WIS,NWC) .
+
+  --- Prop 2 Negation ---
+ ceq p(< NI | mem-in(OUT),      A > NWC,WIS,NIS,M?) = false
+  if out-netlabel-by-pid(NI,NIS) ~l OUT             = false .
+
+  --- Prop 3 ---
+  --- mem-out() attr correlates with kernel metadata
+ ceq p(< NI | mem-out(OUT),     A > NWC,WIS,NIS,M?) =
+     p(< NI | mem-out(nolabel), A > NWC,WIS,NIS,M?)
+  if out-netlabel-by-pid(NI,NIS) ~l OUT
+  /\ proc-loaded?(NI,none,NIS,WIS,NWC) .
+
+  --- Prop 3 Negation ---
+ ceq p(< NI | mem-out(OUT),     A > NWC,WIS,NIS,M?) = false
+  if out-netlabel-by-pid(NI,NIS) ~l OUT             = false .
+
+  --- Prop 4 ---
+  --- NOTE: should false case be relaxed to don't care instead of NonRetMsgList
+ ceq p(< WI | loading(true), fromKernel(ML @ msg(PI,PI',MSG-RETURN-URL,OUT) @ ML2), A > NWC,WIS,NIS,M?) =
+     p(< WI | loading(true), fromKernel(ML @                                  ML2), A > NWC,WIS,NIS,M?)
+  if WI ~p PI'
+  /\ (weblabel-by-pid(WI,WIS),OUT) ~lp netlabelpair-by-pid(PI,NIS) .
+
+ ceq p(< WI | fromKernel(ML @ NRM @ ML2), A > NWC,WIS,NIS,M?) =
+     p(< WI | fromKernel(ML @       ML2), A > NWC,WIS,NIS,M?)
+  if pid-in-weblabels?(WI,WIS) .
+
+ ceq p(< WI | fromKernel(mt),     A > NWC,WIS,NIS,M?) =
+     p(< WI | fromKernel(nolist), A > NWC,WIS,NIS,M?)
+  if pid-in-weblabels?(WI,WIS) .
+
+ ceq p(< WI | loading(false), fromKernel(ML    ), A > NWC,WIS,NIS,M?) =
+     p(< WI | loading(false), fromKernel(nolist), A > NWC,WIS,NIS,M?)
+  if pid-in-weblabels?(WI,WIS) .
+
+  --- Prop 4 -- Negation
+ ceq p(< WI | loading(true),  fromKernel(ML @ msg(PI,PI',MSG-RETURN-URL,OUT) @ ML2), A > NWC,WIS,NIS,M?) = false
+  if WI ~p PI' and (weblabel-by-pid(WI,WIS),OUT) ~lp netlabelpair-by-pid(PI,NIS) = false .
+
+  --- Other needed pieces:
+  ---
+  --- 1. WebProc toKernel queue invariant
+  --- 2. NetProc toKernel queue invariant
+  --- 3. NetProc in/out attribute invariants
+  --- 4. currentlyHandled attribute invariant
+  --- 5. NetProcInfoSet/WebProcInfoSet invariants
+  --- 6. Miscellaneous
+  ---
+
+  --- 1. WebProc toKernel queue invariant
+  ---   a. A fetch msg should be in the queue only if the loading attribute is true
+  ---   b. The fetch msg src/target should be consistent with our policy
+ ceq p(< WI | toKernel(ML @ NFM @ ML2), A > NWC,WIS,NIS,M?) =
+     p(< WI | toKernel(ML @       ML2), A > NWC,WIS,NIS,M?)
+  if pid-in-weblabels?(WI,WIS) .
+
+ ceq p(< WI | loading(true), URL(OUT1), toKernel(ML @ msg(PI,PI',MSG-FETCH-URL,OUT2) @ ML2), A > NWC,WIS,NIS,M?) =
+     p(< WI | loading(true), URL(OUT1), toKernel(ML @                                  ML2), A > NWC,WIS,NIS,M?)
+  if pid-in-weblabels?(WI,WIS)
+  /\ PI   ~p WI
+  /\ PI'  ~p network
+  /\ OUT1 ~l OUT2 .
+
+ ceq p(< WI | toKernel(mt),     A > NWC,WIS,NIS,M?) =
+     p(< WI | toKernel(nolist), A > NWC,WIS,NIS,M?)
+  if pid-in-weblabels?(WI,WIS) .
+
+ ceq p(< WI | URL(OUT1), toKernel(ML @ msg(PI,PI',MSG-FETCH-URL,OUT2) @ ML2), A > NWC,WIS,NIS,M?) = false
+  if OUT1 ~l OUT2 = false .
+
+ ceq p(< WI | toKernel(ML @ msg(PI,PI',MSG-FETCH-URL,OUT2) @ ML2), A > NWC,WIS,NIS,M?) = false
+  if PI ~p WI and PI' ~p network = false .
+
+  eq p(< WI | loading(false), toKernel(HFL), A > NWC,WIS,NIS,M?) = false .
+
+  --- 2. NetProc toKernel queue invariant
+  ---   a. if the message type is MSG-RETURN-URL, then:
+  ---     i.  message target is from returnTo - which comes from a webapp that matches this one on the IN
+  ---     ii. message label is from the in() attribute --- which means it comes from the Webapp URL, encoded in the OUT
+ ceq p(< NI | toKernel(ML @ msg(PI,PI',MSG-RETURN-URL,OUT) @ ML2), A > NWC,WIS,NIS,M?) =
+     p(< NI | toKernel(ML @                                  ML2), A > NWC,WIS,NIS,M?)
+  if PI ~p NI
+  /\ (weblabel-by-pid(PI',WIS),OUT) ~lp netlabelpair-by-pid(NI,NIS)
+  /\ proc-loaded?(NI,PI',NIS,WIS,NWC) .
+
+ ceq p(< NI | toKernel(ML @ NRM                             @ ML2), A > NWC,WIS,NIS,M?) =
+     p(< NI | toKernel(ML @                                   ML2), A > NWC,WIS,NIS,M?)
+  if pid-in-netlabels?(NI,NIS) .
+
+ ceq p(< NI | toKernel(mt),                                         A > NWC,WIS,NIS,M?) =
+     p(< NI | toKernel(nolist),                                     A > NWC,WIS,NIS,M?)
+  if pid-in-netlabels?(NI,NIS) .
+
+  --- negation
+ ceq p(< NI | toKernel(ML @ msg(PI,PI',MSG-RETURN-URL,OUT) @ ML2), A > NWC,WIS,NIS,M?) = false
+  if PI ~p NI and (weblabel-by-pid(PI',WIS),OUT) ~lp netlabelpair-by-pid(PI,NIS) and proc-loaded?(NI,PI',NIS,WIS,NWC) = false .
+
+  --- 3. in()/out() attribute invariants
+ ceq p(< NI | out(LL ; OUT ; LL'),  A > NWC,WIS,NIS,M?) =
+     p(< NI | out(LL ;       LL'),  A > NWC,WIS,NIS,M?)
+  if out-netlabel-by-pid(NI,NIS) ~l OUT
+  /\ proc-loaded?(NI,none,NIS,WIS,NWC) .
+
+ ceq p(< NI | in(LL ; OUT ; LL'), A > NWC,WIS,NIS,M?) =
+     p(< NI | in(LL ;       LL'), A > NWC,WIS,NIS,M?)
+  if out-netlabel-by-pid(NI,NIS) ~l OUT
+  /\ proc-loaded?(NI,none,NIS,WIS,NWC) .
+
+  --- in/out invariant negation
+ ceq p(< NI | in (LL ; OUT ; LL'), A > NWC,WIS,NIS,M?) = false
+  if out-netlabel-by-pid(NI,NIS) ~l OUT = false .
+
+ ceq p(< NI | out(LL ; OUT ; LL'), A > NWC,WIS,NIS,M?) = false
+  if out-netlabel-by-pid(NI,NIS) ~l OUT = false .
+
+  --- 4. currentlyHandled() attribute invariant
+  --- NB: FetchMT cases needed for 6-a or 6-b
+  --- NB: NEW-URL case needed for new-url
+  --- a. handle messages to NetProcs
+  eq p(NWC,                            WIS,NIS,msg(ui, webapp,MSG-NEW-URL,   OUT)) = p(NWC,WIS,NIS,none) .
+ ceq p(NWC,                            WIS,NIS,msg(ui, CPI,   MSG-SWITCH-TAB,OUT)) = p(NWC,WIS,NIS,none) if pid-in-weblabels?(CPI,WIS) .
+ ceq p(NWC,                            WIS,NIS,msg(ui, CPI,   MSG-SWITCH-TAB,OUT)) = false               if pid-in-weblabels?(CPI,WIS) = false .
+  ---
+ ceq p(NWC,WIS,NIS,msg(CPI, NI, FetchMT,    OUT)) = p(NWC,WIS,NIS,none) if proc-loaded?(NI,CPI,NIS,WIS,NWC) /\ (weblabel-by-pid(CPI, WIS),OUT) ~lp netlabelpair-by-pid(NI,NIS) .
+ ceq p(NWC,WIS,NIS,msg(CPI, NI, NonFetchMT, OUT)) = p(NWC,WIS,NIS,none) if pid-in-netlabels?(NI,NIS) .
+ ceq p(NWC,WIS,NIS,msg(CPI, NI, FetchMT,    OUT)) = false               if proc-loaded?(NI,CPI,NIS,WIS,NWC) and (weblabel-by-pid(CPI, WIS),OUT) ~lp netlabelpair-by-pid(NI,NIS) = false .
+ ceq p(NWC,WIS,NIS,msg(CPI, NI, NonFetchMT, OUT)) = false               if pid-in-netlabels?(NI,NIS) = false .
+  --- b. handle messages to WebProcs
+ ceq p(NWC,WIS,NIS,msg(CPI, WI, RetMT,      OUT)) = p(NWC,WIS,NIS,none)  if proc-loaded?(CPI,WI,NIS,WIS,NWC) /\ (weblabel-by-pid(WI,WIS),OUT) ~lp netlabelpair-by-pid(CPI,NIS) .
+ ceq p(NWC,WIS,NIS,msg(CPI, WI, NonRetMT,   OUT)) = p(NWC,WIS,NIS,none)  if pid-in-weblabels?(WI,WIS) .
+ ceq p(NWC,WIS,NIS,msg(CPI, WI, RetMT,      OUT)) = false                if proc-loaded?(CPI,WI,NIS,WIS,NWC) and (weblabel-by-pid(WI,WIS),OUT) ~lp netlabelpair-by-pid(CPI, NIS) = false .
+ ceq p(NWC,WIS,NIS,msg(CPI, WI, NonRetMT,   OUT)) = false                if pid-in-weblabels?(WI,WIS) = false .
+
+  --- 5. NetProcInfoSet/WebProcInfoSet invariants
+ ceq p(NWC,(pi(WI,IN),wp WIS),                  NIS, M?) = p(NWC,WIS,NIS,M?) if in-conf?(WI,NWC) = false /\ inlbl-in-netlabels?(IN,NIS) = false .
+ ceq p(NWC,(pi(WI,IN),wp WIS),(pi(NI,IN,OUT),np NIS),M?) = p(NWC,WIS,NIS,M?) if in-conf?(WI,NWC) = false /\ in-conf?(NI,NWC) = false .
+  --- Needed for 6-a/6-b and new-url
+ ceq p(NWC,              WIS ,(pi(NI,IN,OUT),np NIS),M?) = true              if p(NWC,WIS,NIS,M?) = true .
+ ceq p(NWC,(pi(WI,IN),wp WIS),                  NIS, M?) = true              if p(NWC,WIS,NIS,M?) = true .
+
+  --- 6. Miscellaneous invariants
+  --- a. process consumption invariants
+  eq p(< WI | toKernel(nolist), fromKernel(nolist),                                                         A > NWC,WIS,NIS,M?) = p(NWC,WIS,NIS,M?) .
+  eq p(< NI | toKernel(nolist), fromKernel(nolist), mem-in(nolabel), mem-out(nolabel), in(mtLL), out(mtLL), A > NWC,WIS,NIS,M?) = p(NWC,WIS,NIS,M?) .
+  --- b. attribute canonization
+ ceq p(< WI | loading(true), A > NWC,WIS,NIS,M?) = true if p(< WI | loading(false), A > NWC,WIS,NIS,M?) .
+  eq p(< WI | rendered(L),   A > NWC,WIS,NIS,M?) = p(< WI | rendered(nolabel), A > NWC,WIS,NIS,M?) .
+ ceq p(< NI | returnTo(CPI), A > NWC,WIS,NIS,M?) = p(< NI | returnTo(none),    A > NWC,WIS,NIS,M?)
+  if proc-loaded?(NI,CPI,NIS,WIS,NWC) .
+  --- c.i. any WebProc corresponding to a NetProc must be loaded
+ ceq p(< NI | A > NWC,WIS,NIS,M?) = false
+  if proc-loaded?(NI,none,NIS,WIS,NWC) = false .
+  --- c.ii. any WebProc referenced by a returnTo() attribute must be loaded
+ ceq p(< NI | returnTo(CPI), A > NWC,WIS,NIS,M?) = false
+  if proc-loaded?(NI,CPI,NIS,WIS,NWC) = false .
+  --- e. every NetProc must have a metadata label
+ ceq p(< NI | A > NWC,WIS,NIS,M?) = false
+  if pid-in-netlabels?(NI,NIS) = false .
+  --- f. every WebProc must have a metadata label
+ ceq p(< WI | A > NWC,WIS,NIS,M?) = false
+  if pid-in-weblabels?(WI,WIS) = false .
+  --- g. the true case, i.e. everything is consumed
+  eq p(none,mtWPIS,mtNPIS,none) = true .
+endfm
+
+---
+--- This module defines neeeded Non-FVP predicates for specifying the address bar correctness (ABC) invariant
+--- ABC-3. For each WebProc, the rendered() attribute should be blank or equal to the URL() attribute
+---
+fmod IBOS-ABC-PRED is
+  pr IBOS-AUX-NONFVP .
+
+  var NIS : NetProcInfoSet .
+  var NWC : NetWebProcConfig .
+  var WI : ConcWebProcId .
+  var NI : ConcNetProcId .
+  var A : AttributeSet .
+  var ML : MessageList .
+  var IN OUT L : Label .
+  var B : Bool .
+
+  --- ABC-3. For each WebProc, the rendered() attribute should be blank or equal to the URL() attribute
+  op render-consistent? : NetWebProcConfig -> Bool [metadata "196"] .
+  eq render-consistent?(< NI | A >                        NWC) = render-consistent?(NWC) .
+ ceq render-consistent?(< WI | URL(OUT), rendered(L), A > NWC) = render-consistent?(NWC) if L blank-or-equal OUT .
+ ceq render-consistent?(< WI | URL(OUT), rendered(L), A > NWC) = false                   if L blank-or-equal OUT = false .
+  eq render-consistent?(none) = true .
+  ---
+  eq render-consistent?(< WI | loading(B),     A > NWC) = render-consistent?(< WI | A > NWC) .
+  eq render-consistent?(< WI | toKernel(ML),   A > NWC) = render-consistent?(< WI | A > NWC) .
+  eq render-consistent?(< WI | fromKernel(ML), A > NWC) = render-consistent?(< WI | A > NWC) .
+endfm
+
+--- This module gathers all additional predicates together
+fmod IBOS-PREDS is
+  pr IBOS-SOP-PRED .
+  pr IBOS-ABC-PRED .
+endfm
+
+--- This module enriches the IBOS system extended with the `stop` rule with all additional predicates
+mod IBOS-STOP-WITH-PREDS is
+  pr IBOS-PREDS .
+  pr IBOS-STOP .
+endm

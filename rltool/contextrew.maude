@@ -1,0 +1,284 @@
+--- This file implements a contextual rewriting-based
+--- CNF-formula validity checker which uses an order-sorted
+--- congruence closure algorithm (that supports axioms) as its
+--- primary workhorse. The valdity checking process goes like this:
+--- through several steps:
+--- [1] it checks the module supports contextual rewriting (i.e. congruence closure)
+--- [2] converts the formula to CNF
+--- [3] applies a variant-unifiication-based clause simplifier
+---     whenever possible to generate sets of simplified clauses
+---
+--- At this point, we must now check EACH clause is VALID:
+---
+--- [4] if any clause can be solved with variant-satisfiability, that will be attempted:
+---     otherwise, the variables in the clause will become constants, and then
+---     the antecedent will pass to a congruence closure algorithm
+--- [5] the succedent will be rewritten with the union of the congruence-closure
+---     generated rewrite theory; if any of the equalities in the succedent drop
+---     out, the clause is valid---otherwise, we don't know
+--- [6] we either return true or a simplified CNF formula containing the conjunction
+---     of all of the clauses we could not solve
+
+--- Module provides a variant-satisfiability-based clause solver;
+--- given a clause, if any atom in the succedent falls within an
+--- FVP fragment which protects an OS-compact constructor subtheory,
+--- we then can perform variant satisfiability to solve the clause
+fmod VAR-SAT-CLAUSE-SOLVER is
+  pr VAR-UNIF-CLAUSE-SIMPLIFIER . --- for filter-disj()
+  pr VAR-SAT .                    --- for var-sat()
+  pr GENERIC-FORMULA-REDUCTION .  --- for MaybeBool and QFFormSetBoolPair
+
+  op vs-valid-clauses  : Module DisjSet         -> QFFormSetBoolPair .
+  op vs-valid-clauses1 : Module DisjSet DisjSet -> QFFormSetBoolPair .
+  op vs-valid-clauses2 : Module FOFormPair      -> MaybeBool .
+
+  var ND : NegDisj? . var PD P1 P2 : PosDisj? . var PA : PosEqAtom . var DS : Disj .
+  var U : Module . var D D' : DisjSet . var B B' : Bool .
+
+  --- INP: Module DisjSet (Clause)
+  --- PRE: Module is FVP and protects OS-compact constructor subtheory
+  --- OUT: Given a set of clauses CS:
+  ---      If all clauses can be proved valid by var-sat, returns (mtFormSet,true)
+  ---      Otherwise, returns (CS',false) where CS' is the set of clauses that cannot be proved invalid
+  --- [0] if noModule, we are done
+  eq vs-valid-clauses (noModule,D)          = (D,nobool) .
+  eq vs-valid-clauses (U,D)                 = vs-valid-clauses1(U,D,mtFormSet) [owise] .
+  --- [1] separate positive part of clause into var-sat applicable part; throw out any valid clauses
+  eq vs-valid-clauses1(U,ND \/ PD | D,D')   = if vs-valid-clauses2(U,filter-disj(U,PD,mtForm,mtForm)) == true then vs-valid-clauses1(U,D,D') else vs-valid-clauses1(U,D,D' | ND \/ PD) fi .
+  eq vs-valid-clauses1(U,mtFormSet,D')      = (D',if D' == mtFormSet then true else nobool fi) .
+  --- [2] check if any of the var-sat applicable conjuncts is valid
+  eq vs-valid-clauses2(U,(PA \/ P1,P2))     = if var-valid(U,PA) then true else if (P1 \/ P2) == mtForm then nobool else vs-valid-clauses2(U,(P1,P2)) fi fi .
+  eq vs-valid-clauses2(U,(mtForm,P2))       = nobool .
+endfm
+
+--- Performs to a search to see if an unordered pair can be rewritten to a different unordered pair
+--- Or if a term can be rewritten to another term using an equational module
+--- Note that this search is only
+fmod META-SEARCH-EXT is
+  pr RULIFY-FUNCTOR .
+  pr TERMSET-FM .
+  var U : Module .
+  var E1 E2 : Equation .
+  var T1 T2 : Term .
+  var DBG : Bool .
+
+  op pairSearch : Module Bool Equation Equation -> Bool .
+  eq pairSearch(U,DBG,E1,E2) =
+    if lhs(E1) in (lhs(E2) | rhs(E2)) or-else
+       rhs(E1) in (lhs(E2) | rhs(E2))
+      then if DBG
+        then metaReduce2(setEqs(U,getEqs(U) - E1),lhs(E1)) == $metaNeg(rhs(E1))
+	else metaNormalForm?(rulify-func(U),toEqSetTerm(U,E1),toEqSetTerm(U,E2))
+      fi else false
+    fi .
+
+  op metaNormalForm? : Module Term Term -> Bool .
+  eq metaNormalForm?(U,T1,T2) = metaSearch(U,T1,T2,nil,'!,unbounded,0) :: ResultTriple .
+
+  op $metaNeg : Term ~> Term .
+  eq $metaNeg('true.Bool ) = 'false.Bool .
+  eq $metaNeg('false.Bool) = 'true.Bool  .
+endfm
+
+--- Module provides the actual implemnation of contextual rewriting
+--- that will be used in the satisfiablity algorithm
+--- NOTE: no clause simplification is performed here
+fmod CONTEXT-REW is
+  pr MAYBE-BOOL            . --- nobool
+  pr FOFORM-OPERATIONS     . --- size()
+  pr FOFORMSIMPLIFY        . --- simplify()
+  pr FOFORMREDUCE          . --- reduce()
+  pr FOFORM-CONSTS-TO-VARS . --- constsToVars()
+  pr CNF                   . --- toCNF()
+  pr CONG-CLOSURE-LIB      . --- congClosure()
+  pr META-SEARCH-EXT       .
+
+  var U UCC : Module . var ES : EquationSet . var E : Equation .
+  var S : Substitution . var Sz : Nat .
+  var ND  : NegDisj? . var PD : PosDisj? . var D? : Disj? .
+  var NND : NegDisj . var NPD : PosDisj . var D : Disj .
+  var F   : QFForm . var F? : QFForm? . var FK : [QFForm?] .
+  var CC  : CCState .
+  var DBG : Bool .
+
+  --- INP: Module NegDisj PosDisj
+  --- PRE: [1] Disj are well-formed with respect to Module
+  ---      [2] Module's operators are properly annotated with an AC-RPO that is compatible with the rewrite relation
+  ---      [3] Module does not have operators with the id attribute
+  ---      [4] Nat is greater than or equal to the id constant with the highest value
+  ---      [5] all id constants have lowest value in the AC-RPO ordering
+  --- OUT: PosDisj? rewritten with equations from congruence closure of equations in NegDisj modulo B
+  ---  NB: returns mtForm in case the antecedent is unsatisfiable
+  op context-rew : Module NegDisj PosDisj ~> PosDisj .
+  eq context-rew(U,ND,PD) = context-rew1(congClosure(U,false,toNNF(~ ND)),PD) .
+
+  op context-rew1 : CCResult PosDisj ~> PosDisj .
+  eq context-rew1(errCCResult(QL:QidList),PD) = error($join(QL:QidList," ")) .
+  eq context-rew1((UCC,S,ES),PD) =
+    context-rew-debug-print(false,
+      constsToVars(S,
+        if size(reduce(setEqs(UCC,ES),PD << S)) < size(PD)
+          then reduce(setEqs(UCC,ES),PD << S)
+          else if truefalseContradict(addEqs(ES,UCC),false,ES - getTaggedIdEqs(ES))
+	    then mtForm
+	    else reduce(addEqs(ES,UCC),PD << S)
+          fi
+        fi)) .
+
+  --- OUT: simplify QFForm by contextual rewriting if it is a clause
+  op context-rew-simp  : Module QFForm? -> QFForm? .
+  eq context-rew-simp(U,NND \/ NPD) = NND \/ context-rew(U,NND,NPD) .
+  eq context-rew-simp(U,F?)         = F? [owise] .
+
+  --- OUT: debugging printer
+  op context-rew-debug-print : Bool PosDisj ~> PosDisj .
+  eq context-rew-debug-print(true, PD) = PD [print "RESULT: " PD] .
+  eq context-rew-debug-print(false,PD) = PD .
+
+  --- OUT: true iff true and false contradict
+  ---  NB: if DBG == true we use debugging mode where we call metaRewrite
+  ---      instead of metaSearch so we can observe the rewrite path in a
+  ---      step-by-step fashion
+  op truefalseContradict : Module Bool EquationSet -> Bool .
+  eq truefalseContradict(U,DBG,E ES) =
+    pairSearch(U,DBG,E,eq 'true.Bool = 'false.Bool [none].)
+      or-else truefalseContradict(U,DBG,ES) .
+  eq truefalseContradict(U,DBG,none) = false .
+
+  --- OUT: true iff formula is unsatisfiable
+  op cr-unsat : Module QFForm? -> MaybeBool .
+  eq cr-unsat(U,DBG,mtForm) = nobool .
+  eq cr-unsat(U,DBG,tt)     = false .
+  eq cr-unsat(U,DBG,ff)     = true .
+  eq cr-unsat(U,F?)         = cr-unsat(U,false,F?) [owise] .
+
+  --- NB: Bool argument is debugging flag
+  op cr-unsat : Module Bool QFForm? -> MaybeBool .
+  eq cr-unsat(U,DBG,F?) = cr-unsat'(U,DBG,toCNF(~ F?)) .
+
+  op cr-unsat' : Module Bool Disj? -> MaybeBool .
+  eq cr-unsat'(U,DBG,F   /\ D  ) = coerceBool(cr-unsat'(U,DBG,D),false) or-else cr-unsat'(U,DBG,F) .
+  eq cr-unsat'(U,DBG,       D? ) = nobool [owise] .
+  eq cr-unsat'(U,DBG,NND \/ NPD) = cr-unsat'(DBG,congClosure(U,false,toNNF(~ NND))) .
+  eq cr-unsat'(U,DBG,NND       ) = cr-unsat'(DBG,congClosure(U,false,toNNF(~ NND))) .
+
+  op cr-unsat' : Bool CCResult -> MaybeBool .
+  eq cr-unsat'(DBG,errCCResult(QL:QidList)) = nobool .
+  eq cr-unsat'(DBG,(UCC,S,ES)) = if truefalseContradict(addEqs(ES,UCC),DBG,ES - getTaggedIdEqs(ES)) then true else nobool fi .
+endfm
+
+--- Module provides an implementation of contextual-rewriting based satisfiability
+--- (which offloads to a variant-satisfiability based solver whenever possible)
+fmod CONTEXT-REW-SOLVER is
+  pr CNF .                        --- provides toCNF()
+  pr FOFORMREDUCE .               --- provides reduce()
+  pr FOFORMSET-OPERATIONS .       --- provides DisjSet data structure and conversion in DisjSet
+  pr VAR-UNIF-CLAUSE-SIMPLIFIER . --- provides vu-clause-simp()
+  pr FOFORM-EXTRACT-SUBSTITUTION . --- get extract sub
+  pr CONTEXT-REW .                --- provides context-rew()
+
+  op crv      : NeModuleList QFForm  -> QFForm? .
+  op crv'     : NeModuleList QFForm? -> QFForm? .
+  op crv-conj : NeModuleList QFForm? -> QFForm? .
+  op crv-disj : NeModuleList Disj    -> QFForm? .
+  op crv-run  : NeModuleList Disj    -> QFForm? .
+
+  var ML : [NeModuleList] .
+  var RewMod VSMod SimpMod CRMod : Module .
+  var D D' : Disj .
+  var F : QFForm .
+  var FK : [QFForm] .
+  var ND ND' : NegEqDisj? .
+  var PD' : PosEqDisj? .
+  var NPD : PosEqDisj  .
+  var TA : TruthAtom .
+
+  --- validity check goes as follows:
+  eq crv (ML,F) = simplify(crv'(ML,F)) .
+  eq crv'(ML,F) = crv-conj(ML,simplify(toCNF(F))) .
+  eq crv-conj(ML,D /\ F) = crv-disj(ML,D) /\ crv-conj(ML,F) .
+  eq crv-conj(ML,D) = crv-disj(ML,D) .
+  eq crv-conj(ML,mtForm) = mtForm .
+  eq crv-disj(ML,D) =
+    if not crv-run(ML,D) :: QFForm?
+      then error(getFOFormErrMsg(crv-run(ML,D)))
+      else if crv-run(ML,D) == D
+        then D
+        else crv'(ML,crv-run(ML,D))
+    fi fi .
+  eq crv-run(ML,TA) = TA .
+  eq crv-run(RewMod ; VSMod ; SimpMod ; CRMod,D) =
+    cr-success?(D,
+      simplify(context-rew-simp(CRMod,downTerm(modReduce(SimpMod,
+        upTerm(reduce(RewMod,false,
+                 extract-clause-sub(RewMod,
+                   vu-clause-simp(VSMod,D))))),error("cr modreduce failed"))))) [owise] .
+
+  op cr-success? : Disj QFForm? -> Disj .
+  eq cr-success?(D,tt) = tt                                                       . ---[print "CR-SUCCESS-TO-TRUE: " D] .
+  eq cr-success?(D,ff) = ff                                                       [print "CR-FAIL-TO-FALSE: "   D] .
+ ceq cr-success?(D,D) = D                            if not D :: TruthAtom        . ---[print "NO-CHANGE: "          D] .
+ ceq cr-success?(ND \/ NPD,ND' \/ PD') =  tt         if     size(PD') < size(NPD) . ---[print "CR-SUCCESS-SMALLER: " NPD " or " ND " to " PD' " or " ND'] .
+ ceq cr-success?(ND \/ NPD,ND' \/ PD') =  ND' \/ PD' if PD' =/= NPD and-then not size(PD') < size(NPD) [print "CR-FAIL: "    NPD " to " PD' " with " ND'] .
+  eq cr-success?(ND \/ NPD,ND' \/ NPD) =  ND' \/ NPD [print "CR-FAIL-RHS-UNREDUCED: " NPD] .
+  eq cr-success?(D,F) = F                                                         [owise print "CR-FAIL-COMPLEX: " D " with " F] .
+ ceq cr-success?(D,FK) = error("cr unknown fail") if not FK :: QFForm             [owise print "CR-ERROR: " FK " from " D] .
+endfm
+
+fmod CONTEXT-REW-BACKEND-IMPL is
+  pr RLTOOL-BACKEND .
+  pr CONTEXT-REW-SOLVER .
+  pr REACH-PROOF-STATE-OPS .
+  pr FOFORM-CORE-PRETTYPRINT .
+
+  var D : ProofMetadata .
+  var MQL : ScopedMapList .
+  var F : QFForm? .
+  var M : Module .
+  var ModArgs : ModuleList .
+
+  --- TODO: propery parameterize id constant metadata argument
+  eq checkVal((M,'conrew,ModArgs),MQL,D,F) =
+    if ModArgs :: Module then
+      --- FIXME: set output back to false when we are done
+      if @ppCNF(true,'tt.Pred,
+        crv(get-mod(D) ;
+	    getbackend('varunif,'varunif,get-reg(D)) ;
+	    ModArgs ;
+	    toFModule(getbackend('validity,'conrew,get-reg(D))),F)) == tt then true else nobool fi
+      else errb('conrew 'requires 'single 'module 'argument)
+    fi .
+  eq checkUnsat((M,'conrew,ModArgs),MQL,D,F) = cr-unsat(M,F) .
+endfm
+
+---(
+--- TODO: rethink this or remove it
+--- Module provides method to check if a clause in a set of clauses is NOT valid:
+--- This is applied as a last resort if we do not know how to proceed
+--- Strategy is as follows: if in a clause, terms in all positive atoms are:
+---   [a] constructor terms
+---   [b] non-narrowable with convergent equations generated from negative atoms --- still TODO
+---   [c] non-unifiable with each other
+--- we conclude invalid.
+--- Conditions [a] and [b] ensure terms are in normal form; condition [c] ensures they have no common instances
+fmod CLAUSE-INVALIDITY-CHECKER is
+  pr GENERIC-FORMULA-REDUCTION .  --- provides QFFormSetBoolPair data structure
+  pr FOFORMSET                  . --- DisjSet
+  pr CTOR-SIG                   . --- ctor-sig
+  pr FOFORM-OPERATIONS          . --- wellFormed()
+  op clause-invalid?  : Module QFFormSetBoolPair -> QFFormSetBoolPair .
+  op clause-invalid?  : Module DisjSet DisjSet   -> QFFormSetBoolPair .
+  op clause-invalid?  : Module Disj              -> Bool .
+  op clause-invalid'? : Module PosDisj?          -> Bool .
+  var U : Module . var N : NegDisj . var P : PosDisj . var P? : PosDisj? . var T T' : Term . var D D' : DisjSet . var B : Bool .
+
+  eq clause-invalid? (U,N \/ P)       = if wellFormed(ctor-sig(U),P) then clause-invalid'?(U,P) else nobool fi .
+  eq clause-invalid'?(U,T ?= T' \/ P) = metaUnify(U,T =? T,0,0) == noUnifier and-then clause-invalid'?(U,P) .
+  eq clause-invalid'?(U,mtForm)       = true .
+
+  eq clause-invalid?(U,(D,nobool))    = clause-invalid?(U,D,mtFormSet) .
+  eq clause-invalid?(U,(D,B))         = (D,B) .
+  eq clause-invalid?(U,N \/ P | D,D') = if clause-invalid?(U,N \/ P) then (N \/ P | D | D',false) else clause-invalid?(U,D,D' | N \/ P) fi .
+  eq clause-invalid?(U,mtFormSet,D')  = (D',nobool) .
+endfm
+---)

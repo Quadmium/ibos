@@ -1,0 +1,330 @@
+--- name: unsortify.maude
+
+fmod QIDPAIRSET-TERMAPPLY is
+  pr META-LEVEL .
+  pr QIDTUPLESET .
+  pr QIDSET-REFINEMENT .
+
+  var Q : Qid . var T T' : Term .
+  var TL TL' : TermList . var NL : NeTermList .
+  var TQ : TermQid . var TQS : TermQidSet .
+  var QPS : QidPairSet . var B : Bool .
+  var AS : AttrSet . var ES : EquationSet .
+
+  op apply : QidPairSet Bool Term -> Term .
+  eq apply(QPS,true,TQ)  = applyQPS!(TQ,QPS) .
+  eq apply(QPS,false,TQ) = applyQPS (TQ,QPS) .
+  eq apply(QPS,B,Q[NL])  = Q[apply(QPS,B,NL,empty)] .
+
+  op apply : QidPairSet Bool TermList TermList -> Term .
+  eq apply(QPS,B,(T,TL),TL') = apply(QPS,B,TL,(TL',apply(QPS,B,T))) .
+  eq apply(QPS,B,empty,TL)   = TL .
+
+  op apply : QidPairSet Bool TermQid    -> TermQid .
+  op apply : QidPairSet Bool TermQidSet -> TermQidSet .
+  eq apply(QPS,B,TQ ; TQS)      = apply(QPS,B,TQ) ; apply(QPS,B,TQS) .
+  eq apply(QPS,B,(none).QidSet) = none .
+
+  op apply : QidPairSet Bool EquationSet ~> EquationSet .
+  eq apply(QPS,B,eq T = T' [AS]. ES) =
+    (eq apply(QPS,B,T) = apply(QPS,B,T') [AS].)
+    apply(QPS,B,ES) .
+  eq apply(QPS,B,(none).EquationSet) = none .
+endfm
+
+--- Complete solution for reducing a module into a many-sorted one
+--- NOTE: the underlying function is k2s-map#() which lifts a type
+---       into a unique corresponding sort
+fmod MANYSORTIFY is
+  pr TOP-MODULE .
+  pr META-LEVEL .
+  pr QID-JOIN   .
+  pr ATTR-EXTRA .
+
+  var M : Module .
+  var TY : Type .
+  var TYL : TypeList .
+  var ODS : OpDeclSet .
+  var EQS : EquationSet .
+  var RLS : RuleSet .
+  var AS : AttrSet .
+  var T T' : Term .
+  var TL : TermList .
+  var NTL : NeTermList .
+  var S : Sort .
+  var ECnD : EqCondition .
+  var CnD : Condition .
+  var HL : HookList .
+  var Q Q' : Qid .
+  var QL : QidList .
+  var QS : QidSet .
+  var C : Constant .
+  var V : Variable .
+  var TQ : TermQid .
+  var N N' : Nat .
+  var NL : NatList .
+  var NNL : NeNatList .
+  var QPS : QidPairSet .
+
+  op manysortify : Module -> Module [memo] .
+  op manysortify : Module OpDeclSet -> OpDeclSet .
+  op manysortify : Module EquationSet -> EquationSet .
+  op manysortify : Module RuleSet -> RuleSet .
+  op manysortify : Module Condition -> Condition .
+  op manysortify : Module TermList -> TermList .
+  op manysortify : Module AttrSet -> AttrSet .
+  op manysortify : Module HookList -> HookList .
+  op manysortify : Module QidSet -> QidSet .
+  op manysortify : Module TermQid -> TermQid .
+  --- handles poly() operators
+  op manysortify : Module Nat NatList TypeList -> TypeList .
+
+  --- inverse transform intermediate data struct
+  op manysortify-1 : Module -> QidPairSet .
+  op manysortify-1 : Module OpDeclSet QidPairSet -> QidPairSet .
+
+  eq manysortify(M) =
+    setRls(
+      setEqs(
+        setOps(
+	  setSubsorts(
+            setSorts(M,p2QPS(k2s-map#(M))),
+	    none),
+          manysortify(M,getOps(M))),
+        manysortify(M,getEqs(M))),
+      manysortify(M,getRls(M))) .
+
+  eq manysortify(M,op Q : TYL -> TY [poly(NNL) AS]. ODS) =
+    if last(NNL) == 0 then
+      (op Q : manysortify(M,1,front(NNL),TYL) -> 'Universal     [poly(NNL) manysortify(M,AS)].)
+    else
+      (op Q : manysortify(M,1,NNL,TYL)        -> k2s-map#(M,TY) [poly(NNL) manysortify(M,AS)].)
+    fi
+    manysortify(M,ODS) .
+  eq manysortify(M,op Q : TYL -> TY [AS]. ODS) =
+    (op Q : k2s-map#(M,TYL) -> k2s-map#(M,TY) [manysortify(M,AS)].)
+    manysortify(M,ODS) [owise] .
+  eq manysortify(M,(none).OpDeclSet) = none .
+
+  eq manysortify(M,eq T = T' [AS]. EQS) =
+    (eq manysortify(M,T) = manysortify(M,T') [AS] .)
+    manysortify(M,EQS) .
+  eq manysortify(M,ceq T = T' if ECnD [AS]. EQS) =
+    (ceq manysortify(M,T) = manysortify(M,T') if manysortify(M,ECnD) [AS] .)
+    manysortify(M,EQS) .
+  eq manysortify(M,(none).EquationSet) = none .
+
+  eq manysortify(M,rl T => T' [AS]. RLS) =
+    (rl manysortify(M,T) => manysortify(M,T') [AS] .)
+    manysortify(M,RLS) .
+  eq manysortify(M,crl T => T' if CnD [AS]. RLS) =
+    (crl manysortify(M,T) => manysortify(M,T') if manysortify(M,CnD) [AS] .)
+    manysortify(M,RLS) .
+  eq manysortify(M,(none).RuleSet) = none .
+
+  eq manysortify(M,T = T' /\ CnD) =
+    manysortify(M,T) = manysortify(M,T') /\
+    manysortify(M,CnD) .
+  eq manysortify(M,T := T' /\ CnD) =
+    manysortify(M,T) := manysortify(M,T') /\
+    manysortify(M,CnD) .
+  eq manysortify(M,T : S /\ CnD) =
+    manysortify(M,T) : k2s-map#(M,S) /\
+    manysortify(M,CnD) .
+  eq manysortify(M,T => T' /\ CnD) =
+    manysortify(M,T) => manysortify(M,T') /\
+    manysortify(M,CnD) .
+  eq manysortify(M,(nil).EqCondition) = nil .
+
+  eq manysortify(M,C)      = qid(string(getName(C)) + "." + string(k2s-map#(M,getType(C)))) .
+  eq manysortify(M,V)      = qid(string(getName(V)) + ":" + string(k2s-map#(M,getType(V)))) .
+  eq manysortify(M,Q[NTL]) = Q[manysortify(M,NTL)] .
+  eq manysortify(M,(T,TL)) = manysortify(M,T),manysortify(M,TL) .
+  eq manysortify(M,empty)  = empty .
+
+  eq manysortify(M,id(T) AS)       = id(manysortify(M,T)) manysortify(M,AS) .
+  eq manysortify(M,left-id(T) AS)  = left-id(manysortify(M,T)) manysortify(M,AS) .
+  eq manysortify(M,right-id(T) AS) = right-id(manysortify(M,T)) manysortify(M,AS) .
+  eq manysortify(M,special(HL) AS) = special(manysortify(M,HL)) manysortify(M,AS) .
+  eq manysortify(M,AS)             = AS [owise] .
+
+  eq manysortify(M,term-hook(Q,T) HL) =
+    term-hook(Q,manysortify(M,T))
+    manysortify(M,HL) .
+  eq manysortify(M,op-hook(Q,Q',TYL,TY) HL) =
+    op-hook(Q,Q',k2s-map#(M,TYL),k2s-map#(M,TY))
+    manysortify(M,HL) .
+  eq manysortify(M,id-hook(Q,QL) HL) =
+    id-hook(Q,QL)
+    manysortify(M,HL) .
+  eq manysortify(M,(nil).HookList) = nil .
+
+  --- handles poly() operators
+  eq manysortify(M,N,N' NL,TY TYL) =
+    if N == N'
+      then 'Universal manysortify(M,s(N),NL,TYL)
+      else k2s-map#(M,TY) manysortify(M,s(N),N' NL,TYL)
+    fi .
+  eq manysortify(M,N,nil,TYL) = k2s-map#(M,TYL) .
+  eq manysortify(M,N,nil,nil) = nil .
+
+  eq manysortify(M,TQ ; QS) = manysortify(M,TQ) ; manysortify(M,QS) .
+  eq manysortify(M,(none).QidSet) = (none).QidSet .
+
+  eq manysortify-1(M) = manysortify-1(M,getOps(M),none) .
+  eq manysortify-1(M,op Q : TYL -> TY [AS]. ODS,QPS) =
+    manysortify-1(M,ODS,QPS |
+      if in(poly-attr,AS) or TYL =/= nil
+        then none
+	else qp(join(Q '. k2s-map#(M,TY)),join(Q '. TY))
+      fi) .
+  eq manysortify-1(M,(none).OpDeclSet,QPS) = QPS .
+endfm
+
+--- creates an unsortified version of a module
+--- NOTE: by default renames constants so that constants
+---       in the unsorted module cannot be adhoc-overloaded
+---       because adhoc-overloading is dangerous when sort
+---       information is removed and we don't want that
+fmod UNSORTIFY is
+  pr META-LEVEL .
+  pr QID-JOIN   .
+  pr ATTR-EXTRA .
+  pr QIDTUPLESET .
+  pr TOP-MODULE .
+  pr UNIT-FM .
+
+  var M : Module .
+  var TY : Type .
+  var TYL : TypeList .
+  var ODS : OpDeclSet .
+  var EQS : EquationSet .
+  var RLS : RuleSet .
+  var AS : AttrSet .
+  var T T' : Term .
+  var TL : TermList .
+  var NTL : NeTermList .
+  var S : Sort .
+  var ECnD : EqCondition .
+  var CnD : Condition .
+  var HL : HookList .
+  var Q Q' : Qid .
+  var QL : QidList .
+  var QS : QidSet .
+  var C : Constant .
+  var V : Variable .
+  var TQ : TermQid .
+  var N N' : Nat .
+  var NL : NatList .
+  var NNL : NeNatList .
+  var QPS : QidPairSet .
+
+  op unsortify : Module -> Module [memo] .
+  op unsortify : Module OpDeclSet -> OpDeclSet .
+  op unsortify : Module EquationSet -> EquationSet .
+  op unsortify : Module RuleSet -> RuleSet .
+  op unsortify : Module Condition -> Condition .
+  op unsortify : Module TermList -> TermList .
+  op unsortify : Module AttrSet -> AttrSet .
+  op unsortify : Module HookList -> HookList .
+  op unsortify : Module QidSet -> QidSet .
+  op unsortify : Module TermQid -> TermQid .
+  op unsortify : Type -> Type .
+  op unsortify : TypeList -> TypeList .
+
+  --- inverse transform intermediate data struct
+  op unsortify-1 : Module -> QidPairSet .
+  op unsortify-1 : Module OpDeclSet QidPairSet -> QidPairSet .
+  op unsortify-1 : Module QidSet -> QidPairSet .
+
+  eq unsortify(M) =
+    setRls(
+      setEqs(
+        setOps(
+	  setSubsorts(
+            setSorts(M,'U),
+	    none),
+          unsortify(M,getOps(M))),
+        unsortify(M,getEqs(M))),
+      unsortify(M,getRls(M))) .
+
+  eq unsortify(M,op Q : TYL -> TY [poly(NNL) AS]. ODS) =
+    (op if TYL =/= nil then Q else join(Q k2s-map#(M,TY)) fi : unsortify(TYL) -> 'U [unsortify(M,AS)].)
+    unsortify(M,ODS) .
+  eq unsortify(M,op Q : TYL -> TY [AS]. ODS) =
+    (op if TYL =/= nil then Q else join(Q k2s-map#(M,TY)) fi : unsortify(TYL) -> 'U [unsortify(M,AS)].)
+    unsortify(M,ODS) [owise] .
+  eq unsortify(M,(none).OpDeclSet) = none .
+
+  eq unsortify(M,eq T = T' [AS]. EQS) =
+    (eq unsortify(M,T) = unsortify(M,T') [AS] .)
+    unsortify(M,EQS) .
+  eq unsortify(M,ceq T = T' if ECnD [AS]. EQS) =
+    (ceq unsortify(M,T) = unsortify(M,T') if unsortify(M,ECnD) [AS] .)
+    unsortify(M,EQS) .
+  eq unsortify(M,(none).EquationSet) = none .
+
+  eq unsortify(M,rl T => T' [AS]. RLS) =
+    (rl unsortify(M,T) => unsortify(M,T') [AS] .)
+    unsortify(M,RLS) .
+  eq unsortify(M,crl T => T' if CnD [AS]. RLS) =
+    (crl unsortify(M,T) => unsortify(M,T') if unsortify(M,CnD) [AS] .)
+    unsortify(M,RLS) .
+  eq unsortify(M,(none).RuleSet) = none .
+
+  eq unsortify(M,T = T' /\ CnD) =
+    unsortify(M,T) = unsortify(M,T') /\
+    unsortify(M,CnD) .
+  eq unsortify(M,T := T' /\ CnD) =
+    unsortify(M,T) := unsortify(M,T') /\
+    unsortify(M,CnD) .
+  eq unsortify(M,T : S /\ CnD) =
+    unsortify(M,T) : 'U  /\
+    unsortify(M,CnD) .
+  eq unsortify(M,T => T' /\ CnD) =
+    unsortify(M,T) => unsortify(M,T') /\
+    unsortify(M,CnD) .
+  eq unsortify(M,(nil).EqCondition) = nil .
+
+  eq unsortify(M,C)      = join(getName(C) k2s-map#(M,getType(C)) '.U) .
+  eq unsortify(M,V)      = join(getName(V) k2s-map#(M,getType(V)) ':U) .
+  eq unsortify(M,Q[NTL]) = Q[unsortify(M,NTL)] .
+  eq unsortify(M,(T,TL)) = unsortify(M,T),unsortify(M,TL) .
+  eq unsortify(M,empty)  = empty .
+
+  eq unsortify(M,id(T) AS)       = id(unsortify(M,T)) unsortify(M,AS) .
+  eq unsortify(M,left-id(T) AS)  = left-id(unsortify(M,T)) unsortify(M,AS) .
+  eq unsortify(M,right-id(T) AS) = right-id(unsortify(M,T)) unsortify(M,AS) .
+  eq unsortify(M,special(HL) AS) = special(unsortify(M,HL)) unsortify(M,AS) .
+  eq unsortify(M,AS)             = AS [owise] .
+
+  eq unsortify(M,term-hook(Q,T) HL) =
+    term-hook(Q,unsortify(M,T))
+    unsortify(M,HL) .
+  eq unsortify(M,op-hook(Q,Q',TYL,TY) HL) =
+    op-hook(Q,Q',unsortify(TYL),'U)
+    unsortify(M,HL) .
+  eq unsortify(M,id-hook(Q,QL) HL) =
+    id-hook(Q,QL)
+    unsortify(M,HL) .
+  eq unsortify(M,(nil).HookList) = nil .
+
+  eq unsortify(M,TQ ; QS) = unsortify(M,TQ) ; unsortify(M,QS) .
+  eq unsortify(M,(none).QidSet) = (none).QidSet .
+
+  eq unsortify(TY TYL) = 'U unsortify(TYL) .
+  eq unsortify((nil).TypeList) = nil .
+
+  eq unsortify-1(M) = unsortify-1(M,getOps(M),none) .
+  eq unsortify-1(M,op Q : TYL -> TY [AS]. ODS,QPS) =
+    unsortify-1(M,ODS,QPS |
+      if TYL =/= nil
+        then none
+	else qp(join(Q k2s-map#(M,TY) '.U),join(Q '. TY))
+      fi) .
+  eq unsortify-1(M,(none).OpDeclSet,QPS) = QPS .
+
+  eq unsortify-1(M,C ; QS) = qp(unsortify(M,C),C) | unsortify-1(M,QS) .
+  eq unsortify-1(M,V ; QS) = qp(unsortify(M,V),V) | unsortify-1(M,QS) .
+  eq unsortify-1(M,none)   = none .
+endfm

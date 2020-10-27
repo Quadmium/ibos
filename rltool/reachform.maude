@@ -1,0 +1,953 @@
+--- name: reachform.maude
+--- reqs:
+--- info:
+
+fmod TRANSITION is pr CONSTRAINED-TERMSET .
+  sort StdRule CCRule LCCRule QFCRule ReachForm ReachFormEx .
+  subsort StdRule < CCRule LCCRule < QFCRule < ReachForm < ReachFormEx .
+  op _=>_ : WTerm  WTerm          -> StdRule     [ctor format (d r o d) prec 72] .
+  op _=>_ : CCTerm WTerm          -> CCRule      [ctor ditto]   .
+  op _=>_ : WTerm CCTerm          -> LCCRule     [ctor ditto]   .
+  op _=>_ : QFCTerm QFCTerm       -> QFCRule     [ctor ditto]   .
+  op _=>_ : QFCTerm NeQFCTermSet  -> ReachForm   [ctor ditto]   .
+  op _=>_ : QFCTermSet QFCTermSet -> ReachFormEx [ctor ditto]   .
+  op errReachForm : QidList       -> [ReachForm] [ctor]         .
+  op errReachFormMsg : [ReachForm] -> QidList .
+  eq errReachFormMsg(errReachForm(QL:QidList)) = QL:QidList .
+  eq errReachFormMsg(R:[ReachForm]) = nil [owise] .
+endfm
+
+fmod TRANSITIONSET is pr TRANSITION .
+  sort MaybeReachForm MaybeReachFormEx ReachFormSet ReachFormExSet .
+  subsort ReachForm   < MaybeReachForm   < ReachFormSet   .
+  subsort ReachFormEx < MaybeReachFormEx < ReachFormExSet .
+  subsort MaybeReachForm < MaybeReachFormEx .
+  subsort ReachFormSet   < ReachFormExSet   .
+  op _&_ : ReachFormSet   ReachFormSet   -> ReachFormSet   [ctor assoc comm id: mt format(d d n d) prec 73] .
+  op _&_ : ReachFormExSet ReachFormExSet -> ReachFormExSet [ctor ditto] .
+  op mt  : -> MaybeReachForm [ctor] .
+  var F  : ReachFormEx .
+  eq F & F = F . --- idempotency equation
+  eq errReachFormMsg(errReachForm(QL:QidList) & R:[ReachForm]) = QL:QidList .
+endfm
+
+fmod TRANSITIONLIST is pr TRANSITION .
+  sort ReachFormList ReachFormExList .
+  subsort ReachForm < ReachFormEx ReachFormList < ReachFormExList .
+  op _;_ : ReachFormList ReachFormList     -> ReachFormList   [ctor assoc id: nil] .
+  op _;_ : ReachFormExList ReachFormExList -> ReachFormExList [ctor ditto] .
+  op nil : -> ReachFormList [ctor] .
+endfm
+
+fmod TRANSITION-PROJECTIONS is pr TRANSITION . pr CONSTRAINED-TERM-PROJECTIONS .
+  --- projections/reductions
+  op antc      : ReachForm            -> QFCTerm    .
+  op succ      : ReachForm            -> QFCTermSet .
+  op set-antc  : ReachForm QFCTerm    -> ReachForm .
+  op conj-antc : ReachForm QFForm?    -> ReachForm .
+  op set-succ  : ReachForm QFCTermSet -> ReachForm .
+  op lhs       : ReachForm            -> Term .
+  op rhs       : QFCRule              -> Term .
+  op lhs-cond  : QFCRule              -> QFForm .
+  op rhs-cond  : QFCRule              -> QFForm .
+  ---
+  var CT CT' : QFCTerm . var CTS CTS' : QFCTermSet . var F : QFForm .
+  ---
+  eq lhs(CT => CTS')          = term(CT)    .
+  eq rhs(CT => CT')           = term(CT')   .
+  eq lhs-cond(CT => CTS')     = cond(CT)    .
+  eq rhs-cond(CT => CT')      = cond(CT')   .
+  eq antc(CT => CTS)          = CT          .
+  eq succ(CT => CTS)          = CTS         .
+  eq set-antc(CT => CTS,CT')  = CT' => CTS  .
+  eq set-succ(CT => CTS,CTS') = CT  => CTS' .
+  eq conj-antc(CT => CTS,F)      = conj(CT,F) => CTS .
+  eq conj-antc(CT => CTS,mtForm) = CT => CTS .
+endfm
+
+fmod TRANSITIONSET-PROJECTIONS is pr TRANSITION-PROJECTIONS . pr TRANSITIONSET .
+  op set-antc      : ReachForm QFCTermSet -> ReachFormSet .
+  op set-conj-antc : ReachForm QFCTermSet -> ReachFormSet .
+  var CT CT' : QFCTerm . var CTS CTS' : QFCTermSet .
+  eq set-antc (CT => CTS,CT' | CTS')     = CT' => CTS & set-antc(CT => CTS,CTS') .
+  eq set-antc (CT => CTS,noterm)         = mt .
+  eq set-conj-antc(CT => CTS,CT' | CTS') = conj(CT',CT) => CTS & set-conj-antc(CT => CTS,CTS') .
+  eq set-conj-antc(CT => CTS,noterm)     = mt .
+endfm
+
+fmod TRANSITION-OPERATIONS is
+  pr TRANSITION-PROJECTIONS .
+  pr CONSTRAINED-TERMSET-OPERATIONS .
+  pr CONSTRAINED-TERMSETPAIR .
+  pr CONSTRAINED-TEMRSET-SUBSTITUTION .
+  pr FOFORMSIMPLIFY .
+  pr QIDSET-REFINEMENT .
+
+  var M : Module . var Y : Type . var R : ReachForm . var RX : ReachFormEx . var VS VS' : VariableSet .
+  var T : Term . var C C' : QFForm . var CT CT' : QFCTerm . var CTS CTS' : QFCTermSet . var S : Substitution .
+  var B : Bool .
+
+  --- OUT: true iff this reachform is well-formed
+  op wellFormed : Module ReachFormEx -> Bool .
+  op wellFormed : Module Type ReachFormEx -> Bool .
+  eq wellFormed(M,R) = wellFormed(M,antc(R)) and-then wellFormed(M,succ(R)) .
+  eq wellFormed(M,Y,R) = wellFormed(M,Y,antc(R)) and-then wellFormed(M,Y,succ(R)) .
+
+  --- OUT: apply meta-normalization to this reachform
+  op normalize : Module ReachFormEx -> ReachFormEx .
+  eq normalize(M,CTS => CTS') = normalize(M,CTS) => normalize(M,CTS') .
+
+  --- OUT: conjoin a formula to the reachform precondition
+  op conj-antc : ReachForm QFForm? -> ReachForm .
+  eq conj-antc((T | C) => CTS,C') = (T | (C /\ C')) => CTS .
+
+  --- OUT: map ReachFormEx to QFCTermSetPair and back
+  op reach-form : QFCTermSetPair -> ReachFormEx .
+  eq reach-form((CTS,CTS')) = CTS => CTS' .
+  op ctermsetpair : ReachFormEx -> QFCTermSetPair .
+  eq ctermsetpair(CTS => CTS') = (CTS,CTS') .
+
+  --- OUT: return true iff this formula has no dangling variables
+  ---      AND a consistent set of parameters
+  op safeVars : ReachFormEx -> Bool .
+  eq safeVars(RX) = noDanglingVars(RX) and-then consistentParams(RX) .
+
+  --- OUT: variant of safeVars that accepts a set of LHS parameter
+  ---      variables directly
+  op safeVars : VariableSet ReachFormEx -> Bool .
+  eq safeVars(VS,RX) = noDanglingVars(VS,succ(RX)) and-then consistentParams(RX) .
+
+  --- OUT: return true iff this formula has no dangling variables, i.e.
+  ---      a variable in a RHS constriant that does not occur in
+  ---      either that RHS's term or in all LHS's
+  ---  NB: this function may give false negatives when a simplification
+  ---      function transforms a condition in the LHS so that variables
+  ---      are deleted --- thus, we use the variant below and pass in
+  ---      directly the set of variables "in" the LHS
+  op noDanglingVars : ReachFormEx -> Bool .
+  eq noDanglingVars(CTS => CTS') = noDanglingVars(sharedVars(CTS),CTS') .
+
+  op noDanglingVars : VariableSet CTermSet -> Bool .
+  eq noDanglingVars(VS,CT' | CTS') = formVars(CT') subset (termVars(CT') ; VS) and-then noDanglingVars(VS,CTS') .
+  eq noDanglingVars(VS,noterm) = true .
+
+  --- OUT: return true iff this formula has consistent parameters, i.e.
+  ---      each LHS precondition shares the same variables with the union of
+  ---      the variables in each RHS midcondition
+  op consistentParams : ReachFormEx -> Bool .
+  eq consistentParams(CT | CTS => CTS') = consistentParams(vars(CTS'),sharedVars(CT,CTS'),CTS) .
+  eq consistentParams(noterm => CTS') = true .
+
+  op consistentParams : VariableSet VariableSet QFCTermSet -> Bool .
+  eq consistentParams(VS,VS',CT | CTS) =
+    intersection(vars(CT),VS) == VS' and-then consistentParams(VS,VS',CTS) .
+  eq consistentParams(VS,VS',noterm) = true .
+
+  --- OUT: return all variables that occur in this reachform
+  op vars : ReachFormEx -> VariableSet .
+  eq vars(CTS => CTS') = vars(CTS | CTS') .
+
+  --- OUT: return variables shared between LHS and RHS
+  op sharedVars : ReachForm -> VariableSet .
+  eq sharedVars(CT => CTS') = sharedVars(CT,CTS') .
+
+  --- OUT: set constraint for a reachform on the RHS
+  op set-lhs-cond : ReachForm QFForm -> ReachForm .
+  eq set-lhs-cond(CT => CTS,C) = setCond(CT,C) => CTS .
+endfm
+
+fmod TRANSITIONSET-OPERATIONS is pr TRANSITIONSET . pr TRANSITION-OPERATIONS .
+
+  var M : Module . var F F' : ReachFormEx . var FS : ReachFormExSet . var Y : Type .
+
+  --- OUT: true iff ReachFormExSet is well-formed
+  op wellFormed : Module ReachFormExSet -> Bool .
+  eq wellFormed(M,F & F' & FS) = wellFormed(M,F) and-then wellFormed(M,F' & FS) .
+  eq wellFormed(M,mt) = true .
+
+  op wellFormed : Module Type ReachFormExSet -> Bool .
+  eq wellFormed(M,Y,F & F' & FS) = wellFormed(M,Y,F) and-then wellFormed(M,Y,F' & FS) .
+  eq wellFormed(M,Y,mt) = true .
+
+  --- OUT: meta normalize a ReachFormExSet
+  op normalize : Module ReachFormExSet -> ReachFormExSet .
+  eq normalize(M,F & F' & FS) = normalize(M,F) & normalize(M,F' & FS) .
+  eq normalize(M,mt) = mt .
+
+  --- OUT: return a set of ill-formed reachforms
+  op illFormedGoalSet : Module ReachFormExSet -> ReachFormExSet .
+  eq illFormedGoalSet(M,F & FS) = if not wellFormed(M,F) then F else mt fi & illFormedGoalSet(M,FS) .
+  eq illFormedGoalSet(M,mt) = mt .
+
+  --- OUT: compute the size of a reach formula set
+  op size : ReachFormExSet -> Nat .
+  eq size(F & FS) = s(size(FS)) .
+  eq size(mt) = 0 .
+endfm
+
+fmod TRANSITION-CONVERSIONS is pr TRANSITIONSET . pr TRANSITIONLIST .
+
+  var CT CT' : QFCTerm     . var CTS CTS' : QFCTermSet . var N : Nat .
+  var F  : ReachFormEx . var FS : ReachFormExSet   . var FL : ReachFormExList .
+
+  --- OUT: converts a ReachFormEx into a ReachFormSet
+  op divide : ReachFormEx -> ReachFormSet .
+  eq divide(CT | CTS => CTS') = CT => CTS' & divide(CTS => CTS') .
+  eq divide(noterm   => CTS') = mt .
+
+  --- OUT: inverse of divide
+  op gather : ReachFormSet ~> ReachFormEx .
+  eq gather(CT => CTS' & CTS => CTS' & FS) = gather(CT | CTS => CTS' & FS) .
+  eq gather(CTS => CTS') = CTS => CTS' .
+
+  --- OUT: ReachFormExSet to ReachFormExList and vice versa
+  op tolist : ReachFormExSet -> ReachFormExList .
+  eq tolist(F & FS) = F ; tolist(FS) .
+  eq tolist(mt) = nil .
+
+  op toset  : ReachFormExList -> ReachFormExSet .
+  eq toset(F ; FL) = F & toset(FL) .
+  eq toset(nil) = mt .
+
+  --- OUT: Pick an element from the list
+  op pick   : ReachFormExList Nat -> ReachFormExList .
+  eq pick(F ; FL,s(N)) = pick(FL,N) .
+  eq pick(F ; FL,0) = F .
+  eq pick(nil,N) = nil .
+endfm
+
+fmod TRANSITION-SUBSTITUTION is pr CONSTRAINED-TEMRSET-SUBSTITUTION . pr TRANSITION-PROJECTIONS .
+  op _<<_ : ReachFormEx Substitution -> ReachFormEx .
+  var R : ReachFormEx . var S : Substitution .
+  eq R << S = antc(R) << S => succ(R) << S .
+endfm
+
+fmod TRANSITIONSET-SUBSTITUTION is pr TRANSITION-SUBSTITUTION . pr TRANSITIONSET . pr SUBSTITUTIONSET .
+  op _<<_ : ReachFormExSet SubstitutionSet -> ReachFormExSet .
+  var R R' : ReachFormEx . var RS : ReachFormExSet . var S S' : Substitution . var SS : SubstitutionSet .
+  eq RS << (S | S' | SS) = RS << S & (RS << S' | SS) .
+  eq RS << empty         = mt .
+  eq (R & R' & RS) << S  = (R << S) & ((R' & RS) << S) .
+  eq  mt << S            = mt .
+endfm
+
+fmod TRANSITION-CONSTS-TO-VARS is pr CONSTRAINED-TERMSET-CONSTS-TO-VARS . pr TRANSITIONSET .
+  op constsToVars : Substitution ReachFormEx -> ReachFormEx .
+  op constsToVars : Substitution ReachFormExSet -> ReachFormExSet .
+
+  var CTS CTS' : QFCTermSet . var S : Substitution .
+  var RF : ReachFormEx . var RFS : ReachFormExSet .
+
+  eq constsToVars(S,CTS => CTS') = constsToVars(S,CTS) => constsToVars(S,CTS') .
+  eq constsToVars(S,RF & RFS) = constsToVars(S,RF) & constsToVars(S,RFS) .
+  eq constsToVars(S,mt) = mt .
+endfm
+
+fmod TRANSITION-PRINTER is pr TRANSITION . pr CONSTRAINED-TERMSET-PRINTER . pr TRANSITION-OPERATIONS .
+  var M : Module . var CTS CTS' : CTermSet .
+
+  op print : Module ReachFormEx -> QidList .
+ ceq print(M,CTS => CTS') = print(M,'\/,CTS) &sp '\r '=> '\o &sp print(M,'\/,CTS')
+  if wellFormed(M,CTS => CTS') .
+  eq print(MK:[Module],RK:[ReachFormEx]) = 'print 'error: 'unable 'to 'print 'formula [owise] .
+
+  op printMeta : ReachFormEx -> QidList .
+  eq printMeta(CTS => CTS') = printMeta(CTS) &sp '=> &sp printMeta(CTS') .
+endfm
+
+fmod TRANSITIONSET-PRINTER is pr TRANSITIONSET . pr TRANSITION-PRINTER .
+  var M : Module . var RF RF' : ReachFormEx . var RFS : ReachFormExSet .
+
+  op print : Module ReachFormExSet -> QidList .
+  eq print(M,RF & RF' & RFS) = print(M,RF) '& print(M,RF' & RFS) .
+  eq print(M,mt)             = &mt .
+
+  op print : ReachFormExSet -> QidList .
+  eq printMeta(RF & RF' & RFS) = printMeta(RF) &sp '& &sp printMeta(RF' & RFS) .
+  eq printMeta(mt)             = 'mt .
+endfm
+
+fmod TRANSITIONSET-RENAME is pr TRANSITIONSET . pr RENAME-METAVARS .
+  op renameAllVar : Module FindResult ReachFormSet -> ReachFormSet .
+  op renameTmpVar : Module FindResult ReachFormSet -> ReachFormSet .
+  op unwrapReachFormSet : TermData                 -> ReachFormSet .
+  var U : Module . var F : ReachFormSet . var N : FindResult . var T : Term .
+  eq renameAllVar(U,N,F) = unwrapReachFormSet(#renameAllVar(U,N,upTerm(F))) .
+  eq renameTmpVar(U,N,F) = unwrapReachFormSet(#renameTmpVar(U,N,upTerm(F))) .
+  eq unwrapReachFormSet(termdata(T,N)) = downTerm(T,mt) .
+endfm
+
+--- LABELED TRANSITIONS
+
+fmod LABEL-TRANSITION is
+  pr TRANSITION .
+  pr MAYBE-QID .
+  sort LabelLCCRule LabelReachForm LabelReachFormEx .
+  subsort LabelLCCRule < LabelReachForm < LabelReachFormEx .
+  op ((_:_)) : MaybeQid LCCRule     -> LabelLCCRule     [ctor] .
+  op ((_:_)) : MaybeQid ReachForm   -> LabelReachForm   [ctor] .
+  op ((_:_)) : MaybeQid ReachFormEx -> LabelReachFormEx [ctor] .
+  op trans : LabelLCCRule           -> LCCRule                 .
+  op trans : LabelReachFormEx       -> ReachFormEx             .
+  op name  : LabelReachFormEx       -> MaybeQid                .
+  var Q : MaybeQid . var T : ReachFormEx .
+  eq trans((Q : T)) = T .
+  eq name((Q : T)) = Q .
+endfm
+
+fmod LABEL-TRANSITION-SET is
+  pr LABEL-TRANSITION .
+  pr CONVERSION .
+  sort LabelRuleEmptySet LabelLCCRuleSet LabelReachFormSet LabelReachFormExSet .
+  subsort LabelLCCRule      < LabelLCCRuleSet .
+  subsort LabelReachForm    < LabelReachFormSet .
+  subsort LabelReachFormEx  < LabelReachFormExSet .
+  subsort LabelLCCRuleSet   < LabelReachFormSet < LabelReachFormExSet .
+  subsort LabelRuleEmptySet < LabelLCCRuleSet .
+  op _|_   : LabelLCCRuleSet     LabelLCCRuleSet     -> LabelLCCRuleSet     [ctor assoc comm id: empty format(d d n d)] .
+  op _|_   : LabelReachFormSet   LabelReachFormSet   -> LabelReachFormSet   [ctor ditto] .
+  op _|_   : LabelReachFormExSet LabelReachFormExSet -> LabelReachFormExSet [ctor ditto] .
+  op empty :                                         -> LabelRuleEmptySet   [ctor] .
+  --- idempotency equation
+  eq T:LabelReachFormEx | T:LabelReachFormEx = T:LabelReachFormEx .
+endfm
+
+fmod LABEL-TRANSITION-LIST is
+  pr LABEL-TRANSITION .
+  sort LabelRuleEmptyList LabelLCCRuleList LabelReachFormList LabelReachFormExList .
+  subsort LabelLCCRule      < LabelLCCRuleList .
+  subsort LabelReachForm    < LabelReachFormList .
+  subsort LabelReachFormEx  < LabelReachFormExList .
+  subsort LabelLCCRuleList   < LabelReachFormList < LabelReachFormExList .
+  subsort LabelRuleEmptyList < LabelLCCRuleList .
+  op _;_   : LabelLCCRuleList     LabelLCCRuleList     -> LabelLCCRuleList     [ctor assoc id: nil] .
+  op _;_   : LabelReachFormList   LabelReachFormList   -> LabelReachFormList   [ctor ditto] .
+  op _;_   : LabelReachFormExList LabelReachFormExList -> LabelReachFormExList [ctor ditto] .
+  op nil : -> LabelRuleEmptyList [ctor] .
+endfm
+
+fmod LABEL-TRANSITION-CONVERSIONS is
+  pr LABEL-TRANSITION-SET .
+  pr LABEL-TRANSITION-LIST .
+  pr TRANSITIONSET .
+  pr TRANSITIONLIST .
+
+  var T T' : LabelReachFormEx . var TS : LabelReachFormExSet . var TL : LabelReachFormExList .
+  var N : Nat . var Q : Qid . var QL : QidList .
+  var CTS CTS' : QFCTermSet .
+  var CT : QFCTerm .
+  var R R' : ReachFormEx .
+
+  op trans : LabelReachFormExSet -> ReachFormExSet .
+  eq trans(T | T' | TS) = trans(T) & trans(T' | TS) .
+  eq trans(empty) = mt .
+
+  --- ### New
+  op trans : LabelReachFormExList -> ReachFormExList .
+  eq trans(T ; T' ; TL) = trans(T) ; trans(T' | TL) .
+  eq trans(nil) = nil .
+
+  --- ### New
+  --- OUT: divides a LabelReachFormEx into a LabelLCCRuleSet
+  op divide : LabelReachFormEx -> LabelReachFormList .
+  op divide : Nat LabelReachFormEx -> LabelReachFormSet .
+  eq divide(T) = if T :: LabelReachForm then T else divide(1,T) fi .
+  eq divide(N,(Q : CT | CTS => CTS')) = (qid(string(Q) + "#" + string(N,10)) : CT => CTS') ; divide(s(N),(Q : CTS => CTS')) .
+  eq divide(N,(Q : noterm   => CTS')) = nil .
+
+  op toset : LabelReachFormExList -> LabelReachFormExSet .
+  eq toset(T ; TL) = T | toset(TL) .
+  eq toset(nil) = (empty).LabelRuleEmptySet .
+
+  op tolist : LabelReachFormExSet -> LabelReachFormExList .
+  eq tolist(T | TS) = T ; tolist(TS) .
+  eq tolist(empty) = (nil).LabelRuleEmptyList .
+
+  op pick : LabelReachFormExList Nat -> LabelReachFormExList .
+  eq pick(T ; TL,0) = T .
+  eq pick(T ; TL,s(N)) = pick(TL,N) .
+  eq pick(nil,N) = nil .
+
+  op byName : LabelReachFormExSet QidList ~> LabelReachFormExList .
+  eq byName((Q : R) | TS,Q QL) = byName(TS,QL) ; (Q : R) .
+  eq byName(TS,nil) = nil .
+
+  op sameName : LabelReachFormExSet -> Bool .
+  eq sameName((Q : R) | (Q : R') | TS) = true .
+  eq sameName(TS) = false [owise] .
+endfm
+
+fmod LABEL-TRANSITION-CONSTS-TO-VARS is pr TRANSITION-CONSTS-TO-VARS . pr LABEL-TRANSITION-SET .
+  op constsToVars : Substitution LabelReachFormEx -> LabelReachFormEx .
+  op constsToVars : Substitution LabelReachFormExSet -> LabelReachFormExSet .
+
+  var MQ : MaybeQid .
+  var RF : ReachFormEx . var S : Substitution .
+  var LRF : LabelReachFormEx . var LRFS : LabelReachFormExSet .
+
+  eq constsToVars(S,(MQ : RF)) = (MQ : constsToVars(S,RF)) .
+  eq constsToVars(S,LRF | LRFS) = constsToVars(S,LRF) | constsToVars(S,LRFS) .
+  eq constsToVars(S,empty) = (empty).LabelRuleEmptySet .
+endfm
+
+fmod LABEL-TRANSITION-PRINTER is pr LABEL-TRANSITION . pr TRANSITION-PRINTER .
+  op  print : Module LabelReachFormEx -> QidList .
+  var M : Module . var CTS CTS' : CTermSet . var MQ : MaybeQid .
+ ceq print(M,(MQ : CTS => CTS')) = '`[ if MQ :: Qid then MQ else '<no-name> fi ': &mt print(M,'\/,CTS) &sp '=> &sp print(M,'\/,CTS') '`]
+  if wellFormed(M,CTS => CTS') .
+  eq print(MK:[Module],LRF:[LabelReachFormEx]) = 'print 'error: 'unable 'to 'print 'formula [owise] .
+endfm
+
+fmod LABEL-TRANSITIONSET-PRINTER is
+  pr LABEL-TRANSITION-SET . pr LABEL-TRANSITION-PRINTER . pr TRANSITIONSET-PRINTER .
+  op  print : Module LabelReachFormExSet -> QidList .
+  var M : Module . var RF RF' : LabelReachFormEx . var RFS : LabelReachFormExSet .
+  eq print(M,RF | RF' | RFS) = print(M,RF) '& print(M,RF' | RFS) .
+  eq print(M,(empty).LabelReachFormExSet) = &mt .
+endfm
+
+fmod LABEL-TRANSITION-SUBSTPAIR is
+  pr LABEL-TRANSITION .
+  sort LabelLCCRuleSubstPair LabelReachFormExSubstPair .
+  subsort LabelLCCRuleSubstPair < LabelReachFormExSubstPair .
+  op ((_,_)) : LabelReachFormEx Substitution -> LabelReachFormExSubstPair [ctor] .
+  op ((_,_)) : LabelLCCRule     Substitution -> LabelLCCRuleSubstPair     [ctor] .
+  op errLabelRuleSubstPair : QidList         -> [LabelLCCRuleSubstPair]   [ctor] .
+  op errLabelRuleSubstPairMsg : [LabelLCCRuleSubstPair] -> QidList .
+  var LS : [LabelLCCRuleSubstPair] . var QL : QidList .
+  eq errLabelRuleSubstPairMsg(errLabelRuleSubstPair(QL)) = QL .
+  eq errLabelRuleSubstPairMsg(LS) = nil [owise] .
+endfm
+
+fmod LABEL-TRANSITION-SUBSTPAIRSET is
+  pr LABEL-TRANSITION-SUBSTPAIR .
+  sort LabelLCCRuleSubstPairEmptySet LabelLCCRuleSubstPairSet LabelReachFormExSubstPairSet .
+  subsort LabelLCCRuleSubstPair < LabelLCCRuleSubstPairSet .
+  subsort LabelReachFormExSubstPair < LabelReachFormExSubstPairSet .
+  subsort LabelLCCRuleSubstPairEmptySet < LabelLCCRuleSubstPairSet < LabelReachFormExSubstPairSet .
+  op _|_   : LabelReachFormExSubstPairSet LabelReachFormExSubstPairSet -> LabelReachFormExSubstPairSet  [ctor assoc comm id: empty] .
+  op _|_   : LabelLCCRuleSubstPairSet     LabelLCCRuleSubstPairSet     -> LabelLCCRuleSubstPairSet      [ctor assoc comm id: empty] .
+  op empty :                                                           -> LabelLCCRuleSubstPairEmptySet [ctor] .
+  var LS : [LabelLCCRuleSubstPair] . var QL : QidList .
+  eq errLabelRuleSubstPairMsg(errLabelRuleSubstPair(QL) | LS) = QL .
+endfm
+
+fmod LABEL-TRANSITION-SUBSTITUTION is
+  pr LABEL-TRANSITION . pr TRANSITION-SUBSTITUTION .
+  op _<<_ : LabelReachFormEx Substitution -> LabelReachFormEx .
+  var L : MaybeQid . var T : ReachFormEx . var S : Substitution .
+  eq (L : T) << S = (L : (T << S)) .
+endfm
+
+--- FOFORM-TRANSITIONSET-PAIR-LIST
+
+fmod FOFORM-TRANSITIONSET-PAIR is
+  pr FOFORM . pr TRANSITIONSET .
+  sort FOFormReachFormSetPair FOFormReachFormExSetPair .
+  subsort FOFormReachFormSetPair < FOFormReachFormExSetPair .
+  op ((_,_)) : FOForm? ReachFormSet   -> FOFormReachFormSetPair   [ctor] .
+  op ((_,_)) : FOForm? ReachFormExSet -> FOFormReachFormExSetPair [ctor] .
+endfm
+
+fmod FOFORM-TRANSITIONSET-PAIR-LIST is
+  pr FOFORM-TRANSITIONSET-PAIR .
+  sort FOFormReachFormSetPairList FOFormReachFormExSetPairList .
+  subsort FOFormReachFormSetPair < FOFormReachFormSetPairList .
+  subsort FOFormReachFormExSetPair < FOFormReachFormExSetPairList .
+  subsort FOFormReachFormSetPairList < FOFormReachFormExSetPairList .
+  op _;_ : FOFormReachFormSetPairList   FOFormReachFormSetPairList   -> FOFormReachFormSetPairList   [ctor assoc id: nil] .
+  op _;_ : FOFormReachFormExSetPairList FOFormReachFormExSetPairList -> FOFormReachFormExSetPairList [ctor assoc id: nil] .
+  op nil : -> FOFormReachFormSetPairList .
+endfm
+
+--- TRANSITION APPLICATIONS
+
+--- TODO: find better convention then true.Bool for the formula conversion
+---       or at least let this bit have a good default value but be user-settable
+fmod ABSTRACT-RULES is
+  pr FOFORM-SUBSTITUTION .
+  pr UNIFIERS .
+  pr DEFINED-SUBTERMS .
+  pr LABEL-TRANSITION-SUBSTITUTION .
+  pr LABEL-TRANSITION-SET .
+  pr LABEL-TRANSITION-SUBSTPAIRSET .
+  pr MAYBE-QID .
+
+  --- create abstract rule set
+  op  abstract-rules  : Module Bool                             ~> LabelLCCRuleSet .
+  op  abstract-rules  : Module RuleSet Constant LabelLCCRuleSet ~> LabelLCCRuleSet .
+  op $abs             : Module Rule Constant                    ~> LabelLCCRule .
+  op $abs             : AbstractionData Rule Constant           ~> LabelLCCRule .
+  op  get-label       : AttrSet                                 -> MaybeQid .
+  --- auxiliary operators
+  op  subst2Conj      : Substitution                            -> PosEqConj? .
+  op  eqCond2Conj     : EqCondition Constant EqConj?            ~> EqConj? .
+  op  toLabelLCCRuleSet : Constant RuleSet LabelLCCRuleSet      ~> LabelLCCRuleSet .
+
+  var Q : Qid . var V : Variable . var RLS : RuleSet . var EC  : EqCondition .
+  var N : Nat . var M : Module   . var AS  : AttrSet . var C P : EqConj? .
+  var L R R' T T' : Term . var RL : Rule . var S S' : Substitution .
+  var K : Constant . var LRS : LabelLCCRuleSet . var B : Bool .
+
+  --- Abstracts rewrite rules
+  eq  abstract-rules(M,true)                 = abstract-rules(M,getRls(M),'true.Bool,empty) .
+  eq  abstract-rules(M,false)                = toLabelLCCRuleSet('true.Bool,getRls(M),empty) .
+  eq  abstract-rules(M,RL RLS,K,LRS)         = abstract-rules(M,RLS,K,LRS | $abs(M,RL,K)) .
+  eq  abstract-rules(M,none,  K,LRS)         = LRS .
+  eq $abs(M,        rl L => R       [AS].,K) = $abs(defined-abs(M,R), rl L => R       [AS].,K) .
+  eq $abs(M,       crl L => R if EC [AS].,K) = $abs(defined-abs(M,R),crl L => R if EC [AS].,K) .
+  eq $abs((N,R',S), rl L => R       [AS].,K) = (get-label(AS) : (L | tt) => (R' |                             subst2Conj(S))) .
+  eq $abs((N,R',S),crl L => R if EC [AS].,K) = (get-label(AS) : (L | tt) => (R' | eqCond2Conj(EC,K,mtForm) /\ subst2Conj(S))) .
+  eq  get-label(label(Q) AS)                 = Q .
+  eq  get-label(AS)                          = noqid [owise] .
+
+  --- Auxiliary operators
+  eq  eqCond2Conj('_=/=_[T,T'] = K /\ EC,K,C) = eqCond2Conj(EC,K,C /\ T != T') .
+  eq  eqCond2Conj('_==_[T,T']  = K /\ EC,K,C) = eqCond2Conj(EC,K,C /\ T ?= T') .
+  eq  eqCond2Conj(T = T'           /\ EC,K,C) = eqCond2Conj(EC,K,C /\ T ?= T') [owise] .
+  eq  eqCond2Conj(nil,                   K,C) = C .
+
+  eq  subst2Conj(V <- T ; S) = V ?= T /\ subst2Conj(S) .
+  eq  subst2Conj(none)       = mtForm .
+
+  eq  toLabelLCCRuleSet(K, rl L => R       [AS]. RLS,LRS) = toLabelLCCRuleSet(K,RLS,LRS | (get-label(AS) : (L | tt) => (R | tt                      ))) .
+  eq  toLabelLCCRuleSet(K,crl L => R if EC [AS]. RLS,LRS) = toLabelLCCRuleSet(K,RLS,LRS | (get-label(AS) : (L | tt) => (R | eqCond2Conj(EC,K,mtForm)))) .
+endfm
+
+fmod TRANSITION-RENAME is
+  pr TRANSITION .
+  pr TRANSITION-PROJECTIONS .
+  pr TRANSITIONSET .
+  pr RENAME-METAVARS .
+  pr VARIABLES-TO-CONSTANTS .
+  pr CONSTRAINED-TERM-OPERATIONS .
+
+  var T : Term . var FS FS' : ReachFormSet . var N : Nat . var M : Module .
+
+  --- PFE: ReachFormSet is well-formed in Module
+  --- OUT: ReachFormSet with all tmp variable renamed
+  op $renameForm  : Module Nat ReachFormSet -> ReachFormSet .
+  op $renameForm  : ReachFormSet TermData -> ReachFormSet .
+  op $renameForm  : ReachFormSet ReachFormSet -> ReachFormSet .
+  eq $renameForm(M,N,FS)           = $renameForm(FS,#renameTmpVar(M,N,upTerm(FS))) .
+  eq $renameForm(FS,termdata(T,N)) = $renameForm(FS,downTerm(T,mt)) .
+  eq $renameForm(mt,mt)            = mt .
+ ceq $renameForm(FS,FS')           = FS' if FS =/= mt and-then FS' =/= mt .
+endfm
+
+fmod TRANSITION-TUPLES is
+  pr TRANSITIONSET .
+  pr SUBSTITUTIONSET-AUX .
+  pr TRANSITION-SUBSTITUTION .
+  pr MODULE-LIST .
+
+  var UL : NeModuleList .
+  var F : ReachForm .
+  var S S' : Substitution . var SS : SubstitutionSet .
+  var FS : ReachFormSet .
+  var FSP : ReachFormSubstPair .
+  var FSPS : ReachFormSubstPairSet .
+
+  sort ReachFormSubstPair ReachFormSubstPairSet .
+  subsort ReachFormSubstPair < ReachFormSubstPairSet .
+  op ((_,_)) : ReachForm Substitution -> ReachFormSubstPair [ctor] .
+  op _&_ : ReachFormSubstPairSet ReachFormSubstPairSet -> ReachFormSubstPairSet [ctor assoc comm id: mtRFSS] .
+  op mtRFSS : -> ReachFormSubstPairSet [ctor] .
+
+  sort NeModListReachFormSubstTuple .
+  op ((_,_)) : NeModuleList ReachFormSubstPairSet -> NeModListReachFormSubstTuple [ctor] .
+
+  op getrf : ReachFormSubstPairSet -> ReachFormSet .
+  eq getrf((F,S) & FSPS) = F & getrf(FSPS) .
+  eq getrf(mtRFSS) = mt .
+
+  op getrf : NeModListReachFormSubstTuple -> ReachFormSet .
+  eq getrf((UL,(F,S) & FSPS)) = F & getrf((UL,FSPS)) .
+  eq getrf((UL,mtRFSS)) = mt .
+
+  op getrfss : NeModListReachFormSubstTuple -> ReachFormSubstPairSet .
+  eq getrfss((UL,FSPS)) = FSPS .
+
+  op liftRFSS : ReachFormSet -> ReachFormSubstPairSet .
+  eq liftRFSS(F & FS) = (F,none) & liftRFSS(FS) .
+  eq liftRFSS(mt) = mtRFSS .
+
+  op liftRFSS : ReachForm SubstitutionSet -> ReachFormSubstPairSet .
+  eq liftRFSS(F,S | SS) = (F,S) & liftRFSS(F,SS) .
+  eq liftRFSS(F,empty) = mtRFSS .
+
+  op _RFSS<<_ : ReachForm SubstitutionSet -> ReachFormSubstPairSet .
+  eq F RFSS<< (S | SS) = (F << S,S) & (F RFSS<< SS) .
+  eq F RFSS<< empty = mtRFSS .
+
+  op _<<_ : ReachFormSubstPair SubstitutionSet -> ReachFormSubstPairSet .
+  eq (F,S) << (S' | SS) = (F << S',S .. S') & ((F,S) << SS) .
+  eq (F,S) << empty     = mtRFSS .
+endfm
+
+fmod TRANSITION-CTOR-SIMPLIFICATION is
+  pr TRANSITION-TUPLES .
+  pr TRANSITION-OPERATIONS .
+  pr FOFORM-EXTRACT-SUBSTITUTION .
+  pr MGCI .
+
+  var M : Module . var R : ReachForm .
+  var T : Term . var CS S S1 S2 : Substitution .
+  var C C' : QFForm . var CTS : QFCTermSet .
+
+  --- OUT: extract conjoined substitutions from the LHS
+  ---      condition and apply them everywhere
+  op extract-conjoined-sub-rf : Module ReachFormSubstPair -> ReachFormSubstPair .
+  eq extract-conjoined-sub-rf(M,(R,S)) =
+    extract-conjoined-sub-rf(M,#extract-conjoined-sub(M,lhs-cond(R)),R,S) .
+
+  ---  NB: the result of #extract-conjoined-sub() is a pair (C,CS) where CS is
+  ---      the substitution-like part and C is everything else;
+  ---      here, we cannot fully apply the substitution everywhere sometimes if
+  ---      if it is not a constructor subtitution so we keep the non-constructor
+  ---      part as a constraint in case it is needed later
+  op extract-conjoined-sub-rf : Module FOFormSubstPair ReachForm Substitution -> ReachFormSubstPair .
+ ceq extract-conjoined-sub-rf(M,(C,CS),(T | C') => CTS,S) =
+    ((T << S1 | C /\ conj-join(toPosEqAtoms(S2))) => ((CTS <<Term S1) <<Form CS), S .. CS)
+  if (S1,S2) := ctor-split-sub(M,CS) .
+endfm
+
+view NeModListReachFormSubstTuple from TRIV to TRANSITION-TUPLES is sort Elt to NeModListReachFormSubstTuple . endv
+
+--- this module provides support for partially FVP function symbols to
+--- the variant-unification based simplification; it essentially a copy
+--- of similar functionality in FOFORM-FILTER with slight modifications
+fmod VAR-UNIF-PARTIAL-FVP is
+  pr FOFORM-FILTER .
+  pr TERMPAIRSET .
+  pr STRING-LIST .
+  pr META-PARSE .
+  pr UNIFIERS .
+
+  var U : Module .
+  var EA : EqAtom . var A : Atom .
+  var C1 C2 C3 : Conj? .
+  var D1 D2 D3 : Disj? .
+  var P1 P2 L R : Term .
+  var TPS : TermPairSet .
+  var O : OpDecl .
+  var OS : OpDeclSet .
+  var S S1 S2 S3 : String .
+
+  --- OUT: like filter-conj/disj but excludes certain atoms
+  ---      that do not conform to the policy specified by
+  ---      metadata in the module
+  ---  NB: currently, we only support a policy that specifies
+  ---      throws out any equalities which are partially FVP
+  ---      and not solveable
+  op filterConjByPolicy : Module Conj? ~> FOFormPair .
+  eq filterConjByPolicy(U,C1) = filterConjByPolicy(U,getFilterPolicy(U),C1,mtForm,mtForm) .
+
+  op filterConjByPolicy : Module TermPairSet Conj? Conj? Conj? ~> FOFormPair .
+  eq filterConjByPolicy(U,TPS,EA /\ C1,C2,C3) = if wellFormed(U,EA) and filterPolicy(U,TPS,EA) then filterConjByPolicy(U,TPS,C1,C2 /\ EA,C3) else filterConjByPolicy(U,TPS,C1,C2,C3 /\ EA) fi .
+  eq filterConjByPolicy(U,TPS,A  /\ C1,C2,C3) = filterConjByPolicy(U,TPS,C1,C2,C3 /\ A) .
+  eq filterConjByPolicy(U,TPS,mtForm,  C2,C3) = (C2,C3) .
+
+  op filterDisjByPolicy : Module Disj? ~> FOFormPair .
+  eq filterDisjByPolicy(U,D1) = filterDisjByPolicy(U,getFilterPolicy(U),D1,mtForm,mtForm) .
+
+  op filterDisjByPolicy : Module TermPairSet Disj? Disj? Disj? ~> FOFormPair .
+  eq filterDisjByPolicy(U,TPS,EA \/ D1,D2,D3) = if wellFormed(U,EA) and filterPolicy(U,TPS,EA) then filterDisjByPolicy(U,TPS,D1,D2 \/ EA,D3) else filterDisjByPolicy(U,TPS,D1,D2,D3 \/ EA) fi .
+  eq filterDisjByPolicy(U,TPS,A  \/ D1,D2,D3) = filterDisjByPolicy(U,TPS,D1,D2,D3 \/ A) .
+  eq filterDisjByPolicy(U,TPS,mtForm,  D2,D3) = (D2,D3) .
+
+  op filterPolicy : Module TermPairSet EqAtom -> Bool .
+  eq filterPolicy(U,TPS,L ?= R) = filterPolicy(U,TPS,L,R) .
+  eq filterPolicy(U,TPS,L != R) = filterPolicy(U,TPS,L,R) .
+
+  op filterPolicy : Module TermPairSet Term Term -> Bool .
+  eq filterPolicy(U,(P1 : P2) | TPS,L,R) =
+    (matches?(U,P1,L) implies matches?(U,P2,R)) and (matches?(U,P1,R) implies matches?(U,P2,L)) and-then filterPolicy(U,TPS,L,R) .
+  eq filterPolicy(U,.TermPairSet,   L,R) = true .
+
+  op getFilterPolicy : Module ~> TermPairSet [memo] .
+  eq getFilterPolicy(U) = getFilterPolicy(U,getOps(U)) .
+
+  op getFilterPolicy : Module OpDeclSet ~> TermPairSet .
+  eq getFilterPolicy(U,O OS) =
+    if metadata(O) :: String and-then parseFilterMetadata(U,metadata(O)) :: Term
+      then (buildTerm(O,0) : parseFilterMetadata(U,metadata(O)))
+      else .TermPairSet
+    fi | getFilterPolicy(U,OS) .
+  eq getFilterPolicy(U,none) = .TermPairSet .
+
+  op parseFilterMetadata : Module String ~> Term .
+ ceq parseFilterMetadata(U,S) = stringToTerm(U,S2) if S1 S2         := split(S," ") .
+ ceq parseFilterMetadata(U,S) = stringToTerm(U,S2) if S1    "ID" S2 := split(S," ") /\ false .
+ ceq parseFilterMetadata(U,S) = stringToTerm(U,S2) if S1 S2 "ID" S3 := split(S," ") /\ stringToTerm(U,S2) :: Term .
+endfm
+
+fmod VAR-UNIF-SIMPLIFY is
+  pr TRANSITION-TUPLES .
+  pr FOFORM-FILTER .
+  pr CTOR-VARIANT .
+  pr SUBSTITUTION-RENAME .
+  pr VAR-UNIF-PARTIAL-FVP .
+
+  var M : Module .
+  var F : ReachForm . var S : Substitution .
+  var SS : SubstitutionSet .
+  var T : Term .
+  var D : NeQFCTermSet .
+  var FSS : ReachFormSubstPairSet .
+  var PC : PosEqConj . var NC : NegEqConj? . var C : Conj . var C? C'? : Conj? .
+
+  --- OUT: simplify a reachform's LHS condition by contructor variant unification
+  ---  NB: note after performing constructor variant unification, we can totally
+  ---      remove the equalities from the constraint, since they will be applied
+  ---      everywhere else in the formula
+  op varunif-simp : Module ReachFormSubstPairSet -> ReachFormSubstPairSet .
+  eq varunif-simp(M,FSS) = varunif-simp1(M,FSS) .
+
+  op varunif-simp1 : Module ReachFormSubstPairSet -> ReachFormSubstPairSet .
+  eq varunif-simp1(noModule,FSS) = FSS . --- HACK: this line must go first---owise case analysis will fail
+  eq varunif-simp1(M,(F,S) & FSS) =
+    if lhs-cond(F) :: Conj then
+      varunif-simp2(M,(F,S),filterConjByPolicy(M,lhs-cond(F)))
+    else
+      (F,S)
+    fi & varunif-simp1(M,FSS) .
+  eq varunif-simp1(M,mtRFSS) = mtRFSS .
+
+  op varunif-simp2 : Module ReachFormSubstPair FOFormPair -> ReachFormSubstPairSet .
+  eq varunif-simp2(M,((T | C) => D,S),(PC /\ NC,C?)) =
+    varunif-simp3(M, ( ((T | NC /\ C?) => D), S ), ctor-unifiers(M,toUnifProb(PC))) .
+  eq varunif-simp2(M,(F,S),(C?,C'?)) = (F,S) [owise] .
+
+  op varunif-simp3 : Module ReachFormSubstPair SubstitutionSet -> ReachFormSubstPairSet .
+  eq varunif-simp3(M,(F,S),SS) = (F,S) << renameTmpVar(M,upTerm(F),SS) .
+endfm
+
+--- TODO:
+--- Everything below this line show be moved out of this file
+
+fmod STEPRESULTSET is
+  pr TRANSITIONSET .
+  pr TRANSITION-TUPLES .
+  pr MAYBE-QID .
+
+  var SRS : StepResultSet . var SRSK : [StepResultSet] .
+  var QL : QidList . var S : Substitution . var F : ReachForm . var MQ : MaybeQid .
+
+  sort StepResult StepResultSet .
+  subsort StepResult < StepResultSet .
+  op (_,_,_) : MaybeQid Substitution ReachForm -> StepResult [ctor] .
+  op __ : StepResultSet StepResultSet -> StepResultSet [ctor assoc comm id: noSteps] .
+  op noSteps : -> StepResultSet [ctor] .
+  op errStepResultSet : QidList ~> StepResultSet [ctor] .
+
+  --- OUT: Extract error mesasge from an errorneous StepResultSet
+  op errStepResultSetMsg : [StepResultSet] -> QidList .
+  eq errStepResultSetMsg(SRSK errStepResultSet(QL)) = QL .
+  eq errStepResultSetMsg(SRSK) = nil [owise] .
+
+  --- OUT: Extract a ReachFormSet from a StepResultSet
+  op toReachFormSet : StepResultSet ~> ReachFormSet .
+  eq toReachFormSet((MQ,S,F) SRS) = F & toReachFormSet(SRS) .
+  eq toReachFormSet(noSteps) = mt .
+  eq toReachFormSet(SRSK) = errReachForm(errStepResultSetMsg(SRSK)) .
+
+  --- OUT: Extract a ReachFormSubstPairSet
+  op toReachFormSubstPairSet : StepResultSet ~> ReachFormSubstPairSet .
+  eq toReachFormSubstPairSet((MQ,S,F) SRS) = (F,S) & toReachFormSubstPairSet(SRS) .
+  eq toReachFormSubstPairSet(noSteps) = mtRFSS .
+endfm
+
+--- TODO: check that narrowing is doing the right thing (TM)
+fmod LCCRULE-NARROWING is
+  pr LABEL-TRANSITION-SET .
+  pr LABEL-TRANSITION-SUBSTPAIRSET .
+  pr SUBSTITUTIONSET .
+  pr UNIFIERS .
+  pr TRANSITIONSET-PROJECTIONS .
+  pr TRANSITION-SUBSTITUTION .
+  pr STEPRESULTSET .
+  pr TRANSITION-PRINTER .
+
+  var AR : LabelLCCRule . var ARS : LabelLCCRuleSet . var CT : QFCTerm . var U : Module . var F : ReachForm .
+  var T : Term . var S : Substitution . var SS : SubstitutionSet . var ARPS : LabelLCCRuleSubstPairSet .
+  var SK : [Substitution] . var ARPSK : [LabelLCCRuleSubstPairSet] .
+  var SRS : StepResultSet . var MQ : MaybeQid .
+
+  --- OUT: Print out a StepResultSet
+  op print : Module StepResultSet -> QidList .
+  eq print(U,(MQ,S,F) SRS) = '`( '\g printMaybeQid(MQ,'<noname>) '\o '`, printSub(U,S) '`, '\n print(U,F) '`) '\n
+                             print(U,SRS) .
+  eq print(U,noSteps) = nil .
+
+  --- PRE: Arguments are well-defined with respect to Module
+  --- OUT: All unifiers between the term and any rule that also satisfies
+  ---      the conditions on both the term and that rule
+  --- NB:  Variable safety here is achieved by two conditions:
+  ---      1. safeUnify() ensures that the rule and formula LHS share no variables
+  ----     2. the variables in the formula LHS have no temporary variables
+  ---         in them --- otherwise they could conflict with those produced
+  ---         by the unification routine
+  op top-narrow : Module LabelLCCRuleSet Term ~> LabelLCCRuleSubstPairSet .
+  eq top-narrow(U,ARS,T) = top-narrow(U,ARS,T,empty) .
+
+  op top-narrow : Module LabelLCCRuleSet Term LabelLCCRuleSubstPairSet ~> LabelLCCRuleSubstPairSet .
+  eq top-narrow(U,AR | ARS,T,ARPS) = top-narrow(U,ARS,T,ARPS | $top-narrow1(U,AR,safeUnify(U,lhs(trans(AR)),T),empty)) .
+  eq top-narrow(U,empty,   T,ARPS) = ARPS .
+
+  op $top-narrow1 : Module LabelLCCRule SubstitutionSet LabelLCCRuleSubstPairSet ~> LabelLCCRuleSubstPairSet .
+  eq $top-narrow1(U,AR,S | SS,ARPS) = $top-narrow1(U,AR,SS,ARPS | (AR,S)) .
+  eq $top-narrow1(U,AR,empty, ARPS) = ARPS .
+  eq $top-narrow1(U,AR,SK,    ARPS) = errLabelRuleSubstPair(errsubMsg(SK)) .
+
+  --- OUT: A wrapper, lifting the above functions to StepResultSets
+  op #top-narrow : Module LabelLCCRuleSet ReachForm ~> StepResultSet .
+  eq #top-narrow(U,ARS,F) = #top-narrow(top-narrow(U,ARS,lhs(F)),F,noSteps) .
+
+  op #top-narrow : LabelLCCRuleSubstPairSet ReachForm StepResultSet ~> StepResultSet .
+  eq #top-narrow((AR,S) | ARPS,F,SRS) = #top-narrow(ARPS,F,SRS (name(AR),S,set-conj-antc(F,succ(trans(AR))) << S)) .
+  eq #top-narrow(empty,        F,SRS) = SRS .
+  eq #top-narrow(ARPSK,        F,SRS) = errStepResultSet(errLabelRuleSubstPairMsg(ARPSK)) .
+
+  --- OUT: A wrapper, lifting the above functions to ReachFormSets
+  op top-narrow : Module LabelLCCRuleSet ReachForm ~> ReachFormSet .
+  eq top-narrow(U,ARS,F) = toReachFormSet(#top-narrow(U,ARS,F)) .
+endfm
+
+fmod TRANSITION-INVARIANT is
+  pr TRANSITION .
+  pr TRANSITION-OPERATIONS .
+  pr CONSTRAINED-TERM-INVARIANT .
+  op mk-inv    : Module QidSet QFCTermSet -> ReachFormEx .
+  op wrap-term : Module ReachFormEx Qid   -> ReachFormEx .
+  var M : Module . var QS : QidSet . var Q : Qid . var F : ReachFormEx . var CTS : QFCTermSet .
+  eq mk-inv(M,QS,CTS) = reach-form(mk-pair(M,QS,CTS)) .
+  eq wrap-term(M,F,Q) = reach-form(wrap-term(M,ctermsetpair(F),Q)) .
+endfm
+
+fmod REACH-PROOF-GOAL-SIMPLIFICATION-IMPL is
+  pr TRANSITIONSET .
+  pr FOFORMREDUCE .
+  pr FOFORMSIMPLIFY .
+  pr TRANSITION-TUPLES .
+  pr PATTERN-OPS .
+  pr TRANSITION-CTOR-SIMPLIFICATION .
+  pr VAR-UNIF-SIMPLIFY .
+
+  var U RU VU : Module .
+  var UL : NeModuleList .
+  var T : Term . var C : QFForm? . var D : QFCTermSet . var R : ReachForm .
+  var F : ReachForm .
+  var S : Substitution .
+  var FS : ReachFormSubstPair .
+  var FSS : ReachFormSubstPairSet .
+
+  --- 1) compute the syntatically non-trivial form
+  --- 2) apply all equations as simplification rules to equality literals
+  --- 3) apply generic formula simplification rules
+  --- 4) find equality literals that are proper substitutions and apply them
+
+  op simplify-impl1 : NeModListReachFormSubstTuple -> NeModListReachFormSubstTuple .
+  eq simplify-impl1((UL,FSS)) = (UL,simplify-impl2(UL,FSS)) .
+
+  op simplify-impl2 : NeModuleList ReachFormSubstPairSet -> ReachFormSubstPairSet .
+  eq simplify-impl2(UL,(F,S) & FS & FSS) = simplify-impl2(UL,(F,S)) & simplify-impl2(UL,FS & FSS) .
+  eq simplify-impl2(UL,mtRFSS) = mtRFSS .
+
+  --- OUT: simplification of goals by various methods
+  ---  NB: all module arguments may be noModule except the first
+  eq simplify-impl2(RU ; VU,(F,S)) =
+    simplify-cond(varunif-simp(VU,extract-conjoined-sub-rf(RU,reduce-cond(RU,overapproximateDiff(RU,(F,S)))))) .
+
+  --- OUT: simplify a reachform's LHS condition by a formula simplification function
+  op simplify-cond : ReachFormSubstPairSet -> ReachFormSubstPairSet .
+  eq simplify-cond(FSS) = simplify-cond1(FSS) .
+
+  op simplify-cond1 : ReachFormSubstPairSet -> ReachFormSubstPairSet .
+  eq simplify-cond1(((T | C) => D,S) & FSS) = split-disj((T | simplify(C)) => D,S) & simplify-cond1(FSS) .
+  eq simplify-cond1(mtRFSS) = mtRFSS .
+
+  --- OUT: reduce a reachform's LHS condition by a module
+  op reduce-cond : Module ReachFormSubstPair -> ReachFormSubstPair .
+  eq reduce-cond(U,((T | C) => D,S)) = ((T | reduce(U,true,C)) => D,S) .
+
+  --- OUT: conjoin overapproximation of difference with LHS condition
+  op overapproximateDiff : Module ReachFormSubstPair -> ReachFormSubstPair .
+  eq overapproximateDiff(U,((T | C) => D,S)) = (((T | cond(overapproximateDiff(U,(T | C),D))) => D),S) .
+
+  --- OUT: split disjunctive heads on reachformulas into multiple goals
+  op split-disj : ReachForm Substitution -> ReachFormSubstPairSet .
+  eq split-disj((T | Q:QFForm \/ Q':QFForm) => D,S) = split-disj((T | Q:QFForm) => D,S) & split-disj((T | Q':QFForm) => D,S) .
+  eq split-disj(R,S) = (R,S) [owise] .
+endfm
+
+view goal-simplify-impl from FUN to REACH-PROOF-GOAL-SIMPLIFICATION-IMPL is
+  sort Elt to NeModListReachFormSubstTuple .
+  op F to simplify-impl1 .
+endv
+
+fmod REACH-PROOF-GOAL-SIMPLIFICATION is
+  pr FIXF{goal-simplify-impl} * (op FixF to goal-simplify-impl) .
+
+  var UL : NeModuleList . var FS : ReachFormSubstPair . var FSS : ReachFormSubstPairSet .
+
+  op goal-simplify : NeModuleList ReachFormSubstPairSet -> ReachFormSubstPairSet .
+  eq goal-simplify(UL,FS & FSS) = getrfss(goal-simplify-impl((UL,FS))) & goal-simplify(UL,FSS) .
+  eq goal-simplify(UL,mtRFSS) = mtRFSS .
+endfm
+
+fmod TRANSITION-FUNCTOR is
+  pr CONSTRAINED-TERM-FUNCTOR .
+  pr TRANSITION .
+
+  var U : Module .
+  var N O S : Qid .
+  var CT CT' : QFCTerm .
+  var CTS : QFCTermSet .
+
+  op rf-func : Module -> Module [memo] .
+  eq rf-func(U) = rf-func(U,qid(opPrefix(U)),qid(sortPrefix(U))) .
+
+  op rf-func : Module Qid Qid -> Module .
+  eq rf-func(U,O,S) =
+    addSorts(join(S 'ReachForm) ; join(S 'CTermSet),
+      addSubsorts(subsort join(S 'CTerm) < join(S 'CTermSet) .,
+        addOps(op '=>     : join(S 'CTerm)    join(S 'CTermSet) -> join(S 'ReachForm) [none].
+               op '|      : join(S 'CTermSet) join(S 'CTermSet) -> join(S 'CTermSet)  [assoc comm id(join('noterm. S 'CTermSet))].
+               op 'noterm : nil                                 -> join(S 'CTermSet)  [none].,
+          cterm-func(U,O,S)))) .
+
+  --- OUT: A term that represents the given reachform
+  op rf-func : Module ReachForm -> Term .
+  eq rf-func(U,CT => CTS) = '=>[cterm-func(U,CT),ctermset-func(U,CTS)] .
+
+  op ctermset-func : Module QFCTermSet -> Term .
+  eq ctermset-func(U,noterm) = join('noterm. qid(sortPrefix(U)) 'CTermSet) .
+  eq ctermset-func(U,CT) = cterm-func(U,CT) .
+  eq ctermset-func(U,CT | CT' | CTS) = '|[ctermset-func2(U,CT | CT' | CTS)] .
+
+  op ctermset-func2 : Module QFCTermSet -> TermList .
+  eq ctermset-func2(U,CT | CTS) = cterm-func(U,CT),ctermset-func2(U,CTS) .
+  eq ctermset-func2(U,noterm) = empty .
+
+  --- OUT: A term that represents the given reachform where the LHS
+  ---      has a formula variable conjoined to it
+  op rf-func-ext : Module ReachForm -> Term .
+  eq rf-func-ext(U,CT => CTS) = '=>[cterm-func-ext(U,'X,CT),ctermset-func-ext(U,'X,CTS)] .
+
+  op ctermset-func-ext : Module Qid QFCTermSet -> Term .
+  eq ctermset-func-ext(U,N,noterm) = join('C: qid(sortPrefix(U)) 'CTermSet) .
+  eq ctermset-func-ext(U,N,CT | CTS) = '|[ctermset-func2(U,CT | CTS),join('C: qid(sortPrefix(U)) 'CTermSet)] .
+endfm
+
+fmod TRANSITION-MATCH is
+  pr TRANSITION-FUNCTOR .
+  pr CONSTRAINED-TERMSET-MATCH .
+
+  var U : Module . var R R' : ReachForm .
+
+  op matches : Module ReachForm ReachForm -> SubstitutionSet .
+  eq matches(U,R,R') = remove(matches(rf-func(U),rf-func-ext(U,R),rf-func(U,R')),
+                         form-variable(qid(sortPrefix(U))) <- tt-literal(qid(opPrefix(U))) ;
+                         join('C: qid(sortPrefix(U)) 'CTermSet) <- join('noterm. qid(sortPrefix(U)) 'CTermSet)) .
+endfm

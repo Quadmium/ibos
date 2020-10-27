@@ -1,0 +1,33 @@
+--- version of SET{X} with memoization for some operations
+
+fmod SETM{X :: TRIV} is
+  protecting BOOL .
+  sorts NeSetM{X} SetM{X} .
+  subsort X$Elt < NeSetM{X} < SetM{X} .
+
+  op mt : -> SetM{X} [ctor] .
+  op _&_ : SetM{X} SetM{X} -> SetM{X} [ctor assoc comm id: mt prec 121] .
+  op _&_ : NeSetM{X} SetM{X} -> NeSetM{X} [ctor ditto] .
+
+  var E : X$Elt .
+  var N : NeSetM{X} .
+  vars A S S' : SetM{X} .
+
+  eq N & N = N .
+
+  --- NOTE: should be used in an if_then_else_fi condition
+  ---       by checking S =< S' == true
+  op _=<_ : SetM{X} SetM{X} -> [Bool] [memo] .
+  eq S =< (S & S') = true .
+endfm
+
+fmod SETM-QID is
+  pr SETM{Qid} .
+  pr META-MODULE .
+
+  var Q : Qid . var QS : QidSet .
+
+  op toSetM : QidSet -> SetM{Qid} .
+  eq toSetM(Q ; QS) = Q & toSetM(QS) .
+  eq toSetM(none) = mt .
+endfm
