@@ -866,6 +866,34 @@ mod IBOS-EXTEND is
   ceq afterDelim(S, Delim) = Data if 
     N    := find(S, Delim, 0) /\
     Data := substr(S, N + 1, length(S)) .
+  
+  var WPIS : WebProcInfoSet .
+  var WPI : WebProcInfo .
+  var CWPID : ConcWebProcId .
+
+  op string : ConcWebProcId -> String .
+  eq string(webapp(N)) = string(N, 10) .
+
+  op string : WebProcInfo -> String .
+  eq string(pi(CWPID, L)) = "WPID: " + string(CWPID) + ", " + string(L) .
+
+  op string : WebProcInfoSet -> String .
+  eq string(WPI ,wp mtWPIS) = string(WPI) .
+  ceq string(WPI ,wp WPIS) = string(WPI) + "\n" + string(WPIS) if WPIS =/= mtWPIS .
+
+  var NPIS : NetProcInfoSet .
+  var NPI : NetProcInfo .
+  var CNPID : ConcNetProcId .
+
+  op string : ConcNetProcId -> String .
+  eq string(network(N)) = string(N, 10) .
+
+  op string : NetProcInfo -> String .
+  eq string(pi(CNPID, L, L')) = "NPID: " + string(CNPID) + ", " + string(L) + ", " + string(L') .
+
+  op string : NetProcInfoSet -> String .
+  eq string(NPI ,np mtNPIS) = string(NPI) .
+  ceq string(NPI ,np NPIS) = string(NPI) + "\n" + string(NPIS) if NPIS =/= mtNPIS .
 
   op start : -> Configuration .
   rl [start] : 
@@ -921,13 +949,13 @@ mod IBOS-EXTEND is
     received(socketClient, TS, S)
 
     < display | activeWebapp(webapp(N)), Att2 >
-    < kernel | displayedTopBar(L), Att >
+    < kernel | displayedTopBar(L), weblabels(WPIS), netlabels(NPIS), Att >
   => 
     < socketClient : SocketClient | state: sending, name: TS >
-    send(TS, socketClient, string(L) + "|" + string(N, 10))
+    send(TS, socketClient, string(L) + "|" + string(N, 10) + "|" + string(WPIS) + "|" + string(NPIS))
 
     < display | activeWebapp(webapp(N)), Att2 >
-    < kernel | displayedTopBar(L), Att >
+    < kernel | displayedTopBar(L), weblabels(WPIS), netlabels(NPIS), Att >
   if 
     untilDelim(S, "#") == "FETCH-STATE"
     .

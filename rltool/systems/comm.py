@@ -49,12 +49,16 @@ class Application:
         state = self.connection.recv(1000).decode().split("|")
         self.set_url_text(state[0])
         self.set_active_app_text(state[1])
+        self.set_weblabels_text("Web Labels: \n{}\n\nNet Labels: \n{}".format(state[2], state[3]))
 
     def set_url_text(self, url):
         self.builder.get_variable("url_label_text").set("Current URL: {}".format(url))
 
     def set_active_app_text(self, text):
         self.builder.get_variable("active_app_text").set("Active Webapp: {}".format(text))
+    
+    def set_weblabels_text(self, text):
+        self.builder.get_variable("weblabels_text").set(text)
 
     def on_button_send_click(self):
         new_url = self.builder.get_variable("url_entry_text").get()
