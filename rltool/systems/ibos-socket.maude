@@ -736,12 +736,13 @@ mod KERNEL is
        < PPI1   | toKernel(ML),                          Att2 > Cnf } .
 
   **** Made into a topmost rule from module KERNEL-POLICIES
- rl [kernelForwardsOPMessage] :
+ crl [kernelForwardsOPMessage] :
      { < kernel | handledCurrently(msg(PPI1, PPI2, MT, L)) , Att  >
        < PPI2   | fromKernel(ML) ,                           Att2 > Cnf }
   =>
      { < kernel | handledCurrently(none),                   Att  >
-       < PPI2   | fromKernel(ML @ msg(PPI1, PPI2, MT, L)) , Att2 > Cnf } .
+       < PPI2   | fromKernel(ML @ msg(PPI1, PPI2, MT, L)) , Att2 > Cnf } 
+  if MT ~m MSG-SWITCH-TAB == false .
 
   **** Made into a topmost rule from module KERNEL-POLICIES
   rl [tab-change] :
@@ -931,16 +932,30 @@ mod IBOS-EXTEND is
     received(socketClient, TS, S)
 
     < ui | toKernel(ML) >
-    < kernel | displayedTopBar(L), Att >
   =>  
     receive(TS, socketClient)
     < socketClient : SocketClient | state: receiving, name: TS >
 
     < ui | toKernel(ML @ msg(ui,webapp, MSG-NEW-URL, url(S'))) >
-    < kernel | displayedTopBar(L), Att >
   if 
     Data := untilDelim(S, "#") /\
     untilDelim(Data, "|") == "MSG-NEW-URL" /\
+    S' := afterDelim(Data, "|")
+    .
+
+  crl [receivedSwitchTab] : 
+    < socketClient : SocketClient | state: receiving, name: TS >
+    received(socketClient, TS, S)
+
+    < ui | toKernel(ML) >
+  =>  
+    receive(TS, socketClient)
+    < socketClient : SocketClient | state: receiving, name: TS >
+
+    < ui | toKernel(ML @ msg(ui,webapp(rat(S', 10)), MSG-SWITCH-TAB, about-blank)) >
+  if 
+    Data := untilDelim(S, "#") /\
+    untilDelim(Data, "|") == "MSG-SWITCH-TAB" /\
     S' := afterDelim(Data, "|")
     .
 

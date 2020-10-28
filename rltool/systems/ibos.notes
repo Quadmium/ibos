@@ -1,4 +1,4 @@
-This shouldnt need the ceq
+This shouldnt need the ceq? Not sure.
 
  **** auxiliary function for checking that a network process links to a given label
   op np-by-lbl? : Label NetProcInfoSet -> Bool [metadata "82"] .
@@ -6,3 +6,45 @@ This shouldnt need the ceq
  ceq np-by-lbl?(L',(pi(network(N),L,L'') ,np NPIS)) = np-by-lbl?(L',NPIS) if L' ~l L'' = false .
   eq np-by-lbl?(L',mtNPIS) = false .
 
+
+Need to add an if not switch tab here, because otherwise the message gets passed to the webapp.
+
+Its a conflict between the following rule (with the if inserted):
+
+ **** Made into a topmost rule from module KERNEL-POLICIES
+ crl [kernelForwardsOPMessage] :
+     { < kernel | handledCurrently(msg(PPI1, PPI2, MT, L)) , Att  >
+       < PPI2   | fromKernel(ML) ,                           Att2 > Cnf }
+  =>
+     { < kernel | handledCurrently(none),                   Att  >
+       < PPI2   | fromKernel(ML @ msg(PPI1, PPI2, MT, L)) , Att2 > Cnf } 
+  if MT ~m MSG-SWITCH-TAB == false .
+
+and this rule:
+
+**** Made into a topmost rule from module KERNEL-POLICIES
+rl [tab-change] :
+    { < kernel  |
+          handledCurrently(msg(ui, WI', MSG-SWITCH-TAB, L1)),
+          displayedTopBar(L2),
+          weblabels(pi(WI', L'),wp WPIS),
+          Att >
+      < display |
+          activeWebapp(MWI),
+          displayedContent(L3),
+          Att2 >
+      Cnf }
+=>
+    { < kernel  |
+          handledCurrently(none),
+          displayedTopBar(L'),
+          weblabels(pi(WI', L'),wp WPIS),
+          Att >
+      < display |
+          activeWebapp(WI'),
+          displayedContent(about-blank),
+          Att2 >
+      Cnf } .
+
+Since tab-change tries to grab the message the kernel is handling and communicate which webapp to switch by using the message target proc. 
+However, the general message passing rule can execute first tossing the MSG-SWITCH-TAB into the target webapp's fromKernel buffer.

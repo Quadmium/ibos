@@ -50,6 +50,9 @@ class Application:
         self.set_url_text(state[0])
         self.set_active_app_text(state[1])
         self.set_weblabels_text("Web Labels: \n{}\n\nNet Labels: \n{}".format(state[2], state[3]))
+        self.builder.get_object("app_combobox").config(values=[x.split(" ")[1][:-1] for x in state[2].split("\n")])
+        self.builder.get_object("app_combobox").bind('<<ComboboxSelected>>', self.on_app_combobox_select)
+        self.builder.get_variable("app_combobox_text").set(state[1])
 
     def set_url_text(self, url):
         self.builder.get_variable("url_label_text").set("Current URL: {}".format(url))
@@ -63,6 +66,11 @@ class Application:
     def on_button_send_click(self):
         new_url = self.builder.get_variable("url_entry_text").get()
         self.connection.sendall(("MSG-NEW-URL|" + new_url + "#").encode())
+        self.fetch_state()
+
+    def on_app_combobox_select(self, event):
+        new_tab = self.builder.get_object("app_combobox").get()
+        self.connection.sendall(("MSG-SWITCH-TAB|" + new_tab + "#").encode())
         self.fetch_state()
 
 

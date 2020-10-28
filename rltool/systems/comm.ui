@@ -53,6 +53,7 @@
     </child>
     <child>
       <object class="ttk.Combobox" id="app_combobox">
+        <property name="textvariable">string:app_combobox_text</property>
         <layout manager="place">
           <property name="anchor">nw</property>
           <property name="width">100</property>
