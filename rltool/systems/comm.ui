@@ -2,7 +2,7 @@
 <interface version="1.0">
   <object class="ttk.Frame" id="mainwindow">
     <property name="height">200</property>
-    <property name="width">300</property>
+    <property name="width">260</property>
     <layout manager="pack">
       <property name="propagate">True</property>
       <property name="side">top</property>
@@ -24,6 +24,7 @@
         <property name="textvariable">string:url_entry_text</property>
         <layout manager="place">
           <property name="anchor">nw</property>
+          <property name="width">160</property>
           <property name="x">90</property>
           <property name="y">7</property>
         </layout>
@@ -47,6 +48,28 @@
           <property name="anchor">nw</property>
           <property name="x">10</property>
           <property name="y">80</property>
+        </layout>
+      </object>
+    </child>
+    <child>
+      <object class="ttk.Combobox" id="app_combobox">
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="width">100</property>
+          <property name="x">150</property>
+          <property name="y">40</property>
+        </layout>
+      </object>
+    </child>
+    <child>
+      <object class="ttk.Label" id="active_app_label">
+        <property name="font">TkDefaultFont</property>
+        <property name="text" translatable="yes">Active Webapp: </property>
+        <property name="textvariable">string:active_app_text</property>
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="x">10</property>
+          <property name="y">100</property>
         </layout>
       </object>
     </child>

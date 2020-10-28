@@ -817,12 +817,15 @@ mod IBOS is
   pr KERNEL .
 endm
 
+*** What is this?
+***(
 mod IBOS-STOP is
   pr IBOS .
   var C : Configuration .
   op [_] : Configuration -> State [ctor metadata "87"] .
   rl [stop] : { C } => [ C ] .
 endm
+)
 
 mod IBOS-EXTEND is 
   pr IBOS .
@@ -841,7 +844,7 @@ mod IBOS-EXTEND is
 
   var TS : Oid .
   var Cnf : Configuration .
-  var Att : AttributeSet .
+  vars Att Att2 : AttributeSet .
   vars L L' : Label .
   var N : Nat .
   var ML : MessageList .
@@ -917,11 +920,13 @@ mod IBOS-EXTEND is
     < socketClient : SocketClient | state: receiving, name: TS >
     received(socketClient, TS, S)
 
+    < display | activeWebapp(webapp(N)), Att2 >
     < kernel | displayedTopBar(L), Att >
   => 
     < socketClient : SocketClient | state: sending, name: TS >
-    send(TS, socketClient, string(L)) 
+    send(TS, socketClient, string(L) + "|" + string(N, 10))
 
+    < display | activeWebapp(webapp(N)), Att2 >
     < kernel | displayedTopBar(L), Att >
   if 
     untilDelim(S, "#") == "FETCH-STATE"

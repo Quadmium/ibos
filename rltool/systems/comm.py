@@ -45,10 +45,16 @@ class Application:
 
     def fetch_state(self):
         self.connection.sendall(("FETCH-STATE#").encode())
-        self.set_url_text(self.connection.recv(1000).decode())
+        # TODO: add # delimiter at end of msg
+        state = self.connection.recv(1000).decode().split("|")
+        self.set_url_text(state[0])
+        self.set_active_app_text(state[1])
 
     def set_url_text(self, url):
         self.builder.get_variable("url_label_text").set("Current URL: {}".format(url))
+
+    def set_active_app_text(self, text):
+        self.builder.get_variable("active_app_text").set("Active Webapp: {}".format(text))
 
     def on_button_send_click(self):
         new_url = self.builder.get_variable("url_entry_text").get()
