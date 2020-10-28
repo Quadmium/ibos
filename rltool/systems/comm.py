@@ -4,9 +4,10 @@ import socket
 import sys
 import time
 
-class Application:
-    
-    def __init__(self):
+class Application(pygubu.TkApplication):
+    def _create_ui(self):
+        self.set_title("IBOS Comm")
+
         #1: Create a builder
         self.builder = builder = pygubu.Builder()
 
@@ -75,5 +76,6 @@ class Application:
 
 
 if __name__ == '__main__':
-    app = Application()
+    root = tk.Tk()
+    app = Application(root)
     app.run()
