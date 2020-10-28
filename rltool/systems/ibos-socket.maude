@@ -845,8 +845,7 @@ mod IBOS-EXTEND is
   vars L L' : Label .
   var N : Nat .
   var ML : MessageList .
-  var S : String .
-  var S' : String .
+  vars S S' Data Delim : String .
 
   op string : Label -> String .
   eq string(url(N)) = string(N, 10) .
@@ -854,15 +853,22 @@ mod IBOS-EXTEND is
 
   eq url(S) ~l url(S') = S == S' [variant] .
 
-  op LastSent : -> Cid .
-  op lastSent : -> Oid .
+  op untilDelim : String String -> String .
+  op afterDelim : String String -> String .
+
+  ceq untilDelim(S, Delim) = Data if 
+    N    := find(S, Delim, 0) /\
+    Data := substr(S, 0, N) .
+  
+  ceq afterDelim(S, Delim) = Data if 
+    N    := find(S, Delim, 0) /\
+    Data := substr(S, N + 1, length(S)) .
 
   op start : -> Configuration .
   rl [start] : 
     start 
   =>
     <>
-    < lastSent : LastSent | displayedTopBar(url("0")) >
     < socketClient : SocketClient | state: connecting, name: noname >
     createClientTcpSocket(socketManager, socketClient, "localhost", 8080)
 
@@ -889,17 +895,36 @@ mod IBOS-EXTEND is
     receive(TS, socketClient)
     .
 
-  rl [received] : 
+  crl [receivedNewURL] : 
     < socketClient : SocketClient | state: receiving, name: TS >
     received(socketClient, TS, S)
 
     < ui | toKernel(ML) >
     < kernel | displayedTopBar(L), Att >
+  =>  
+    receive(TS, socketClient)
+    < socketClient : SocketClient | state: receiving, name: TS >
+
+    < ui | toKernel(ML @ msg(ui,webapp, MSG-NEW-URL, url(S'))) >
+    < kernel | displayedTopBar(L), Att >
+  if 
+    Data := untilDelim(S, "#") /\
+    untilDelim(Data, "|") == "MSG-NEW-URL" /\
+    S' := afterDelim(Data, "|")
+    .
+
+  crl [receivedFetchState] : 
+    < socketClient : SocketClient | state: receiving, name: TS >
+    received(socketClient, TS, S)
+
+    < kernel | displayedTopBar(L), Att >
   => 
     < socketClient : SocketClient | state: sending, name: TS >
+    send(TS, socketClient, string(L)) 
 
-    < ui | toKernel(ML @ msg(ui,webapp, MSG-NEW-URL, url(S))) >
     < kernel | displayedTopBar(L), Att >
+  if 
+    untilDelim(S, "#") == "FETCH-STATE"
     .
   
   rl [sent] :
@@ -909,18 +934,6 @@ mod IBOS-EXTEND is
     < socketClient : SocketClient | state: receiving, name: TS >
     receive(TS, socketClient)
     .
-
-  crl [newTopBar] :
-    < lastSent : LastSent | displayedTopBar(L) >
-    < kernel | displayedTopBar(L'), Att >
-    < socketClient : SocketClient | state: sending, name: TS >
-  =>
-    send(TS, socketClient, string(L')) 
-
-    < lastSent : LastSent | displayedTopBar(L') >
-    < kernel | displayedTopBar(L'), Att >
-    < socketClient : SocketClient | state: sending, name: TS >
-  if L ~l L' == false .
     
 endm
 
