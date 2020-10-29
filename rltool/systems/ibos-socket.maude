@@ -736,7 +736,7 @@ mod KERNEL is
        < PPI1   | toKernel(ML),                          Att2 > Cnf } .
 
   **** Made into a topmost rule from module KERNEL-POLICIES
- crl [kernelForwardsOPMessage] :
+  crl [kernelForwardsOPMessage] :
      { < kernel | handledCurrently(msg(PPI1, PPI2, MT, L)) , Att  >
        < PPI2   | fromKernel(ML) ,                           Att2 > Cnf }
   =>
