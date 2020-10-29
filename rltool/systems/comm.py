@@ -66,8 +66,13 @@ class Application(pygubu.TkApplication):
 
     def on_button_send_click(self):
         new_url = self.builder.get_variable("url_entry_text").get()
-        self.connection.sendall(("MSG-NEW-URL|" + new_url + "#").encode())
-        self.fetch_state()
+        try:
+            ip = socket.gethostbyname(new_url)
+            self.connection.sendall(("MSG-NEW-URL|" + new_url + "|" + ip + "#").encode())
+            self.fetch_state()
+        except Exception as e:
+            # TODO: WHAT DO WE DO IF THE DNS LOOKUP FAILS? prob send it to maude
+            print("Exception: {}".format(e))
 
     def on_app_combobox_select(self, event):
         new_tab = self.builder.get_object("app_combobox").get()

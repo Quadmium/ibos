@@ -455,8 +455,9 @@ mod KERNEL-POLICIES-NONFVP is
 
   **** auxiliary function for checking that a network process links to a given label
   op np-by-lbl? : Label NetProcInfoSet -> Bool [metadata "82"] .
-  eq np-by-lbl?(L',(pi(network(N),L,L') ,np NPIS)) = true [variant] .
- ceq np-by-lbl?(L',(pi(network(N),L,L'') ,np NPIS)) = np-by-lbl?(L',NPIS) if L' ~l L'' = false .
+  eq np-by-lbl?(L',(pi(network(N),L,L') ,np NPIS)) = L' ~l L' [variant] .
+ *** ceq np-by-lbl?(L',(pi(network(N),L,L'') ,np NPIS)) = np-by-lbl?(L',NPIS) if L' ~l L'' = false .
+  eq np-by-lbl?(L',(pi(network(N),L,L'') ,np NPIS)) = np-by-lbl?(L',NPIS) .
   eq np-by-lbl?(L',mtNPIS) = false .
 endm
 
@@ -841,7 +842,9 @@ mod IBOS-EXTEND is
   op SocketClient : -> Cid .
   op socketClient : -> Oid .
 
+  op url : String String -> Label [ctor] .
   op url : String -> Label [ctor] .
+  
 
   var TS : Oid .
   var Cnf : Configuration .
@@ -849,13 +852,16 @@ mod IBOS-EXTEND is
   vars L L' : Label .
   var N : Nat .
   var ML : MessageList .
-  vars S S' Data Delim : String .
+  vars S S' S'' S''' Data Delim : String .
 
   op string : Label -> String .
   eq string(url(N)) = string(N, 10) .
   eq string(url(S)) = S .
+  eq string(url(S, S')) = S + ", " + S' .
 
   eq url(S) ~l url(S') = S == S' [variant] .
+  eq url(S, S') ~l url(S'', S''') = S == S'' and S' == S''' [variant] .
+  *** eq url(S, S') ~l url(S'', S''') = S == S'' [variant] .
 
   op untilDelim : String String -> String .
   op afterDelim : String String -> String .
@@ -936,11 +942,13 @@ mod IBOS-EXTEND is
     receive(TS, socketClient)
     < socketClient : SocketClient | state: receiving, name: TS >
 
-    < ui | toKernel(ML @ msg(ui,webapp, MSG-NEW-URL, url(S'))) >
+    < ui | toKernel(ML @ msg(ui,webapp, MSG-NEW-URL, url(S'', S'''))) >
   if 
     Data := untilDelim(S, "#") /\
     untilDelim(Data, "|") == "MSG-NEW-URL" /\
-    S' := afterDelim(Data, "|")
+    S' := afterDelim(Data, "|") /\
+    S'' := untilDelim(S', "|") /\
+    S''' := afterDelim(S', "|")
     .
 
   crl [receivedSwitchTab] : 
