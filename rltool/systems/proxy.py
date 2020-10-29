@@ -1,3 +1,4 @@
+import click
 import logging
 import select
 import socket
@@ -15,6 +16,9 @@ class ThreadingTCPServer(ThreadingMixIn, TCPServer):
 
 
 class SocksProxy(StreamRequestHandler):
+    # def __init__(self, whitelisted_ip=None):
+    #     self.whitelisted_ip = whitelisted_ip
+        
     def handle(self):
         logging.info('Accepting connection from %s:%s' % self.client_address)
 
@@ -49,8 +53,8 @@ class SocksProxy(StreamRequestHandler):
         try:
             if cmd == 1:  # CONNECT
                 print(address)
-                if address != "199.232.77.140":
-                    print("Rejecting non-reddit")
+                if whitelisted_ip is not None and address != whitelisted_ip:
+                    print("Rejecting non whitelisted IP")
                     raise Exception("NO")
 
                 remote = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -104,7 +108,17 @@ class SocksProxy(StreamRequestHandler):
                 if client.send(data) <= 0:
                     break
 
+@click.command()
+@click.option('-l', '--local-addr', "local_addr", default='127.0.0.1', help='local proxy address')
+@click.option('-p', '--local-port', "local_port", default=8080, help='local proxy port')
+@click.option('-w', '--whitelisted-ip', "whitelisted_ip_arg", default=None, help='ip address to whitelist')
+def run(local_addr, local_port, whitelisted_ip_arg):
+    # TODO: Any error checking on the address?
+    global whitelisted_ip
+    whitelisted_ip = whitelisted_ip_arg
+    with ThreadingTCPServer((local_addr, local_port), SocksProxy) as server:
+        server.serve_forever()
+    
 
 if __name__ == '__main__':
-    with ThreadingTCPServer(('127.0.0.1', 8080), SocksProxy) as server:
-        server.serve_forever()
+    run()
