@@ -2,7 +2,7 @@
 <interface version="1.0">
   <object class="ttk.Frame" id="mainwindow">
     <property name="height">400</property>
-    <property name="width">260</property>
+    <property name="width">510</property>
     <layout manager="pack">
       <property name="propagate">True</property>
       <property name="side">top</property>
@@ -10,23 +10,23 @@
     <child>
       <object class="ttk.Button" id="button_send">
         <property name="command">on_button_send_click</property>
-        <property name="text" translatable="yes">Send</property>
+        <property name="text" translatable="yes">Go</property>
         <layout manager="place">
           <property name="anchor">nw</property>
-          <property name="x">10</property>
-          <property name="y">40</property>
+          <property name="x">310</property>
+          <property name="y">5</property>
         </layout>
       </object>
     </child>
     <child>
       <object class="ttk.Entry" id="url_entry">
-        <property name="text" translatable="yes">URL 0</property>
+        <property name="text" translatable="yes">google.com</property>
         <property name="textvariable">string:url_entry_text</property>
         <layout manager="place">
           <property name="anchor">nw</property>
-          <property name="width">160</property>
+          <property name="width">210</property>
           <property name="x">90</property>
-          <property name="y">7</property>
+          <property name="y">10</property>
         </layout>
       </object>
     </child>
@@ -36,7 +36,7 @@
         <layout manager="place">
           <property name="anchor">nw</property>
           <property name="x">10</property>
-          <property name="y">10</property>
+          <property name="y">12</property>
         </layout>
       </object>
     </child>
@@ -47,7 +47,7 @@
         <layout manager="place">
           <property name="anchor">nw</property>
           <property name="x">10</property>
-          <property name="y">80</property>
+          <property name="y">40</property>
         </layout>
       </object>
     </child>
@@ -57,8 +57,8 @@
         <layout manager="place">
           <property name="anchor">nw</property>
           <property name="width">100</property>
-          <property name="x">150</property>
-          <property name="y">40</property>
+          <property name="x">400</property>
+          <property name="y">10</property>
         </layout>
       </object>
     </child>
@@ -70,7 +70,7 @@
         <layout manager="place">
           <property name="anchor">nw</property>
           <property name="x">10</property>
-          <property name="y">100</property>
+          <property name="y">60</property>
         </layout>
       </object>
     </child>
@@ -82,7 +82,7 @@ Net Labels:</property>
         <layout manager="place">
           <property name="anchor">nw</property>
           <property name="x">10</property>
-          <property name="y">130</property>
+          <property name="y">90</property>
         </layout>
       </object>
     </child>

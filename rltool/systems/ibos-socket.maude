@@ -455,9 +455,8 @@ mod KERNEL-POLICIES-NONFVP is
 
   **** auxiliary function for checking that a network process links to a given label
   op np-by-lbl? : Label NetProcInfoSet -> Bool [metadata "82"] .
-  eq np-by-lbl?(L',(pi(network(N),L,L') ,np NPIS)) = L' ~l L' [variant] .
- *** ceq np-by-lbl?(L',(pi(network(N),L,L'') ,np NPIS)) = np-by-lbl?(L',NPIS) if L' ~l L'' = false .
-  eq np-by-lbl?(L',(pi(network(N),L,L'') ,np NPIS)) = np-by-lbl?(L',NPIS) .
+  eq np-by-lbl?(L',(pi(network(N),L,L') ,np NPIS)) = true [variant] .
+ ceq np-by-lbl?(L',(pi(network(N),L,L'') ,np NPIS)) = np-by-lbl?(L',NPIS) if L' ~l L'' = false .
   eq np-by-lbl?(L',mtNPIS) = false .
 endm
 
@@ -861,7 +860,7 @@ mod IBOS-EXTEND is
 
   eq url(S) ~l url(S') = S == S' [variant] .
   eq url(S, S') ~l url(S'', S''') = S == S'' and S' == S''' [variant] .
-  *** eq url(S, S') ~l url(S'', S''') = S == S'' [variant] .
+  eq L ~l L' = false [owise variant] .
 
   op untilDelim : String String -> String .
   op afterDelim : String String -> String .
