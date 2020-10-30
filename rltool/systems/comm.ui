@@ -86,5 +86,16 @@ Net Labels:</property>
         </layout>
       </object>
     </child>
+    <child>
+      <object class="ttk.Button" id="button_1">
+        <property name="command">on_button_hijack_click</property>
+        <property name="text" translatable="yes">Hijack</property>
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="x">420</property>
+          <property name="y">365</property>
+        </layout>
+      </object>
+    </child>
   </object>
 </interface>

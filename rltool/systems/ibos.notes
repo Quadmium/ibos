@@ -1,12 +1,3 @@
-This shouldnt need the ceq? Not sure.
-
- **** auxiliary function for checking that a network process links to a given label
-  op np-by-lbl? : Label NetProcInfoSet -> Bool [metadata "82"] .
-  eq np-by-lbl?(L',(pi(network(N),L,L') ,np NPIS)) = true [variant] .
- ceq np-by-lbl?(L',(pi(network(N),L,L'') ,np NPIS)) = np-by-lbl?(L',NPIS) if L' ~l L'' = false .
-  eq np-by-lbl?(L',mtNPIS) = false .
-
-
 Need to add an if not switch tab here, because otherwise the message gets passed to the webapp.
 
 Its a conflict between the following rule (with the if inserted):

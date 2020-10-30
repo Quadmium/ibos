@@ -3,6 +3,8 @@ import pygubu
 import socket
 import sys
 import time
+import subprocess as sp
+import winlaunch
 
 class Application(pygubu.TkApplication):
     def _create_ui(self):
@@ -19,10 +21,13 @@ class Application(pygubu.TkApplication):
 
         builder.connect_callbacks(self)
 
+        self.hijack = False
+
         self.connect()
 
     def run(self):
         self.update_loop()
+        self.hijack_loop()
         self.mainwindow.mainloop()
 
     def connect(self):
@@ -39,10 +44,20 @@ class Application(pygubu.TkApplication):
         sock.listen(1)
         self.connection, client_address = sock.accept()
 
-    
     def update_loop(self):
         self.fetch_state()
         self.mainwindow.after(1000, self.update_loop)
+
+    def hijack_loop(self):
+        if self.hijack:
+            x, y = winlaunch.win_pos(self.ibos_wid)
+            s_x, s_y = winlaunch.win_size(self.ibos_wid)
+            o_y = 10
+            winlaunch.win_pos(self.firefox_wid, x-5, y+o_y)
+            winlaunch.win_size(self.firefox_wid, s_x - 13, s_y - o_y - 45)
+            winlaunch.win_activate(self.firefox_wid)
+            winlaunch.win_focus(self.firefox_wid)
+        self.mainwindow.after(1, self.hijack_loop)
 
     def fetch_state(self):
         self.connection.sendall(("FETCH-STATE#").encode())
@@ -79,6 +94,16 @@ class Application(pygubu.TkApplication):
         self.connection.sendall(("MSG-SWITCH-TAB|" + new_tab + "#").encode())
         self.fetch_state()
 
+    def on_button_hijack_click(self):
+        cur_windows = winlaunch.current_windows()
+        for wid in cur_windows:
+            if winlaunch.win_name(wid) == "IBOS Comm":
+                self.ibos_wid = wid
+                break
+        
+        self.firefox_wid, firefox_pid = winlaunch.launch("firefox")
+
+        self.hijack = True
 
 if __name__ == '__main__':
     root = tk.Tk()
