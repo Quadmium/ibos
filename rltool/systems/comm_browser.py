@@ -6,6 +6,7 @@ import time
 import subprocess as sp
 import winlaunch
 import atexit
+import os
 
 class BrowserProxyPair():
     def __init__(self, id, url, ip):
@@ -20,7 +21,7 @@ class BrowserProxyPair():
         self.proxy_proc = sp.Popen("python proxy.py --whitelisted-ip={} --local-port={}".format(self.ip, 8081 + self.id), shell=True)
 
     def start_browser(self):
-        self.browser_wid, self.browser_pid, self.browser_proc = winlaunch.launch("SOCKS5_SERVER=127.0.0.1:{} socksify firefox --new-window {}".format(8081 + self.id, self.url))
+        self.browser_wid, self.browser_pid, self.browser_proc = winlaunch.launch("SOCKS5_SERVER=127.0.0.1:{} socksify firefox --new-instance {} -P {}".format(8081 + self.id, self.url, self.id))
 
     def show(self):
         winlaunch.win_activate(self.browser_wid)
@@ -29,8 +30,14 @@ class BrowserProxyPair():
         winlaunch.win_minimize(self.browser_wid)
 
     def kill(self):
-        self.browser_proc.kill()
-        self.proxy_proc.kill()
+        try:
+            os.system("kill -9 {}", self.browser_proc.pid)
+        except:
+            pass
+        try:
+            os.system("kill -9 {}", self.proxy_proc.pid)
+        except:
+            pass
 
 class Application(pygubu.TkApplication):
     def _create_ui(self):
@@ -84,7 +91,7 @@ class Application(pygubu.TkApplication):
         self.mainwindow.after(1000, self.update_loop)
 
     def hijack_loop(self):
-        if self.hijack:
+        if self.hijack and self.cur_tab != -1:
             x, y = winlaunch.win_pos(self.ibos_wid)
             s_x, s_y = winlaunch.win_size(self.ibos_wid)
             o_y = 10
@@ -118,11 +125,11 @@ class Application(pygubu.TkApplication):
         new_url = self.builder.get_variable("url_entry_text").get()
         try:
             ip = socket.gethostbyname(new_url)
+            print("HOSTNAME: {}".format(ip))
             self.connection.sendall(("MSG-NEW-URL|" + new_url + "|" + ip + "#").encode())
-            self.fetch_state()
         except Exception as e:
             # TODO: WHAT DO WE DO IF THE DNS LOOKUP FAILS? prob send it to maude
-            print("Exception: {}".format(e))
+            print("Exception: {}".format(str(e)))
             
         cur_windows = winlaunch.current_windows()
         for wid in cur_windows:
