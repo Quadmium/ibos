@@ -1,0 +1,45 @@
+<?xml version='1.0' encoding='utf-8'?>
+<interface version="1.0">
+  <object class="ttk.Frame" id="mainwindow">
+    <property name="height">35</property>
+    <property name="width">510</property>
+    <layout manager="pack">
+      <property name="propagate">True</property>
+      <property name="side">top</property>
+    </layout>
+    <child>
+      <object class="ttk.Button" id="button_send">
+        <property name="command">on_button_send_click</property>
+        <property name="text" translatable="yes">Go</property>
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="x">310</property>
+          <property name="y">5</property>
+        </layout>
+      </object>
+    </child>
+    <child>
+      <object class="ttk.Entry" id="url_entry">
+        <property name="text" translatable="yes">google.com</property>
+        <property name="textvariable">string:url_entry_text</property>
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="width">290</property>
+          <property name="x">10</property>
+          <property name="y">10</property>
+        </layout>
+      </object>
+    </child>
+    <child>
+      <object class="ttk.Combobox" id="app_combobox">
+        <property name="textvariable">string:app_combobox_text</property>
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="width">100</property>
+          <property name="x">400</property>
+          <property name="y">10</property>
+        </layout>
+      </object>
+    </child>
+  </object>
+</interface>

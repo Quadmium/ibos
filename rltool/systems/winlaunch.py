@@ -41,8 +41,7 @@ def pid_to_cmd(pid):
 
 def run_cmd(cmd):
 	''' Run a command '''
-	proc = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE,
-	                                        stderr=subprocess.PIPE)
+	proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
 	return proc
 
 def get_proc_output(proc):
@@ -72,7 +71,7 @@ def launch(cmd):
 	wid = int(new_wids[0], 16)
 	LAUNCHED.append([cmd, wid])
 	pid = win_pid(wid)
-	return wid, pid
+	return wid, pid, proc
 
 
 
@@ -145,6 +144,9 @@ def win_exists(wid):
 # Extensions
 def win_activate(wid):
 	xdo('windowactivate %s' % (wid))
+
+def win_minimize(wid):
+	xdo('windowminimize %s' % (wid))
 
 def win_focus(wid):
 	xdo('windowfocus %s' % (wid))
