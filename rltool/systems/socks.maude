@@ -7,7 +7,7 @@ rl [start] :
 =>
   <>
   --- news.ycombinator.com
-  createSocketServer(8082, "209.216.230.240")
+  createSocksServer(8082, "209.216.230.240")
   .
 )
 
@@ -21,13 +21,13 @@ mod SOCKS is
   ---op debug : String -> Msg [ctor msg] .
   ---op debug : Nat -> Msg [ctor msg] .
 
-  --- SocketServer(port)
-  op SocketServer : -> Cid [ctor] .
-  op socketServer : Nat -> Oid [ctor] .
+  --- SocksServer(port)
+  op SocksServer : -> Cid [ctor] .
+  op socksServer : Nat -> Oid [ctor] .
 
-  --- createSocketServer(port, whitelisted address)
-  op createSocketServer : Nat String -> Msg [ctor msg] .
-  op createdSocketServer : Nat -> Msg [ctor msg] .
+  --- createSocksServer(port, whitelisted address)
+  op createSocksServer : Nat String -> Msg [ctor msg] .
+  op createdSocksServer : Nat -> Msg [ctor msg] .
 
   op SocksClient : -> Cid [ctor] .
   op socksClient : Nat Oid -> Oid [ctor] .
@@ -78,12 +78,12 @@ mod SOCKS is
   op portToBytes : Nat -> String .
   eq portToBytes(N) = char(N quo (2 ^ 8)) + char(N rem (2 ^ 8)) .
 
-  rl [createSocketServer] :
-    createSocketServer(N, S)
+  rl [createSocksServer] :
+    createSocksServer(N, S)
   =>
-    < socketServer(N) : SocketServer | whitelistedAddress: S >
-    createdSocketServer(N)
-    createServerTcpSocket(socketManager, socketServer(N), N, 5)
+    < socksServer(N) : SocksServer | whitelistedAddress: S >
+    createdSocksServer(N)
+    createServerTcpSocket(socketManager, socksServer(N), N, 5)
     .
 
   rl [receive] :
@@ -136,18 +136,18 @@ mod SOCKS is
     .
 
   rl [createdSocket] :
-    < Me : SocketServer | Att >
+    < Me : SocksServer | Att >
     createdSocket(Me, socketManager, SocketName)
   =>
-    < Me : SocketServer | socketName: SocketName, nextClientID: 0, Att >
+    < Me : SocksServer | socketName: SocketName, nextClientID: 0, Att >
     acceptClient(SocketName, Me)
     .
 
   rl [acceptedClient] :
-    < Me : SocketServer | socketName: SocketName, nextClientID: N, Att >
+    < Me : SocksServer | socketName: SocketName, nextClientID: N, Att >
     acceptedClient(Me, SocketName, Address, NewSocketName)
   =>
-    < Me : SocketServer | socketName: SocketName, nextClientID: (N + 1), Att >
+    < Me : SocksServer | socketName: SocketName, nextClientID: (N + 1), Att >
     acceptClient(SocketName, Me)
     < socksClient(N, Me) : SocksClient | socketName: NewSocketName, state: connected, read: "" >
     .
@@ -240,10 +240,10 @@ mod SOCKS is
     .
 
   rl [checkWhitelist] :
-    < Me : SocketServer | whitelistedAddress: S, Att >
+    < Me : SocksServer | whitelistedAddress: S, Att >
     < socksClient(N, Me) : SocksClient | state: checkingWhitelist, address: S', Att' >
   =>
-    < Me : SocketServer | whitelistedAddress: S, Att >
+    < Me : SocksServer | whitelistedAddress: S, Att >
     < socksClient(N, Me) : SocksClient | state: (if S == S' then readingPort else shouldClose fi), address: S', Att' >
     .
 

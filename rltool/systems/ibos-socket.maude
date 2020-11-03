@@ -961,7 +961,7 @@ mod IBOS-EXTEND is
       nextPort: (N + 1),
       Att >
     < kernel | netlabels((NPI ,np NPIS')), Att2 >
-    createSocketServer(N, S')
+    createSocksServer(N, S')
   if
     not NPI in NPIS /\
     pi(CNPID, url(S, S'), url(S, S')) := NPI
