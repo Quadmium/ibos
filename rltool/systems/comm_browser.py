@@ -8,20 +8,17 @@ import winlaunch
 import atexit
 import os
 
-class BrowserProxyPair():
-    def __init__(self, id, url, ip):
+class BrowserContainer():
+    def __init__(self, id, url, port):
         self.id = id
         self.url = url
-        self.ip = ip
+        self.port = port
 
-        self.start_proxy()
         self.start_browser()
 
-    def start_proxy(self):
-        self.proxy_proc = sp.Popen("python proxy.py --whitelisted-ip={} --local-port={}".format(self.ip, 8081 + self.id), shell=True)
-
     def start_browser(self):
-        self.browser_wid, self.browser_pid, self.browser_proc = winlaunch.launch("SOCKS5_SERVER=127.0.0.1:{} socksify firefox --new-instance {} -P {}".format(8081 + self.id, self.url, self.id))
+        print("{} to port {}".format(self.url, self.port))
+        self.browser_wid, self.browser_pid, self.browser_proc = winlaunch.launch("SOCKS5_SERVER=127.0.0.1:{} socksify firefox --new-instance {} -P {}".format(self.port, self.url, self.id))
 
     def show(self):
         winlaunch.win_activate(self.browser_wid)
@@ -31,11 +28,7 @@ class BrowserProxyPair():
 
     def kill(self):
         try:
-            os.system("kill -9 {}", self.browser_proc.pid)
-        except:
-            pass
-        try:
-            os.system("kill -9 {}", self.proxy_proc.pid)
+            self.browser_proc.kill()
         except:
             pass
 
@@ -61,11 +54,19 @@ class Application(pygubu.TkApplication):
         self.tab_ctr = 0
         self.cur_tab = 0
 
+        self.open_webapps = {}
+        self.last_webapp = 0
+
         self.connect()
 
     def on_exit(self):
+        os.system("for i in $(ps -eaf | grep firefox | awk '{print $2}'); do kill -9 $i; done")
         for tid in self.tabs:
             self.tabs[tid].kill()
+        try:
+            master.destroy()
+        except:
+            pass
 
     def run(self):
         self.update_loop()
@@ -104,6 +105,27 @@ class Application(pygubu.TkApplication):
         self.connection.sendall(("FETCH-STATE#").encode())
         # TODO: add # delimiter at end of msg
         state = self.connection.recv(1000).decode().split("|")
+
+        cur_windows = winlaunch.current_windows()
+        for wid in cur_windows:
+            if winlaunch.win_name(wid) == "IBOS Comm":
+                self.ibos_wid = wid
+                break
+
+        netapps = {}
+        for l in state[3].split("\n"):
+            netapps[l.split(", ")[2]] = int(l.split(" ")[1][:-1])
+
+        for l in state[2].split("\n"):
+            id = int(l.split(" ")[1][:-1])
+            if id == 0:
+                continue
+            url = l.split(", ")[1]
+            ip = l.split(", ")[2]
+            if id > self.last_webapp:
+                self.last_webapp = id
+                self.tabs[id-1] = BrowserContainer(id-1, url, 8081 + netapps[ip] - 1)
+                self.hijack = True
         
         self.builder.get_object("app_combobox").config(values=[x.split(" ")[1][:-1] for x in state[2].split("\n")])
         self.builder.get_object("app_combobox").bind('<<ComboboxSelected>>', self.on_app_combobox_select)
@@ -125,22 +147,11 @@ class Application(pygubu.TkApplication):
         new_url = self.builder.get_variable("url_entry_text").get()
         try:
             ip = socket.gethostbyname(new_url)
-            print("HOSTNAME: {}".format(ip))
+            print("DNS Lookup: {}".format(ip))
             self.connection.sendall(("MSG-NEW-URL|" + new_url + "|" + ip + "#").encode())
         except Exception as e:
             # TODO: WHAT DO WE DO IF THE DNS LOOKUP FAILS? prob send it to maude
             print("Exception: {}".format(str(e)))
-            
-        cur_windows = winlaunch.current_windows()
-        for wid in cur_windows:
-            if winlaunch.win_name(wid) == "IBOS Comm":
-                self.ibos_wid = wid
-                break
-        
-        self.tabs[self.tab_ctr] = BrowserProxyPair(self.tab_ctr, new_url, ip)
-        self.tab_ctr += 1
-
-        self.hijack = True
 
     def on_app_combobox_select(self, event):
         new_tab = self.builder.get_object("app_combobox").get()

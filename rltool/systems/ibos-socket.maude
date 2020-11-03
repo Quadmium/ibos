@@ -1,4 +1,5 @@
 load socket.maude
+load socks.maude
 
 --- The identity operators include:
 ---
@@ -832,6 +833,7 @@ mod IBOS-EXTEND is
   pr IBOS .
   pr SOCKET .
   pr CONVERSION .
+  pr SOCKS .
 
   sort SocketState .
   ops idle connecting active closing : -> SocketState [ctor] .
@@ -847,12 +849,11 @@ mod IBOS-EXTEND is
 
   op url : String String -> Label [ctor] .
   op url : String -> Label [ctor] .
-  
 
   var TS : Oid .
   var Cnf : Configuration .
   vars Att Att2 : AttributeSet .
-  vars L L' : Label .
+  vars L L' L'' L''' : Label .
   var N : Nat .
   var ML : MessageList .
   vars S S' S'' S''' Data Rest Delim : String .
@@ -891,9 +892,9 @@ mod IBOS-EXTEND is
   eq string(WPI ,wp mtWPIS) = string(WPI) .
   ceq string(WPI ,wp WPIS) = string(WPI) + "\n" + string(WPIS) if WPIS =/= mtWPIS .
 
-  var NPIS : NetProcInfoSet .
+  vars NPIS NPIS' NPIS'' : NetProcInfoSet .
   var NPI : NetProcInfo .
-  var CNPID : ConcNetProcId .
+  var CNPID CNPID' : ConcNetProcId .
 
   op string : ConcNetProcId -> String .
   eq string(network(N)) = string(N, 10) .
@@ -905,6 +906,25 @@ mod IBOS-EXTEND is
   eq string(NPI ,np mtNPIS) = string(NPI) .
   ceq string(NPI ,np NPIS) = string(NPI) + "\n" + string(NPIS) if NPIS =/= mtNPIS .
 
+  op _in_ : NetProcInfo NetProcInfoSet -> Bool .
+  eq NPI in (NPI ,np NPIS) = true .
+  eq NPI in NPIS = false [owise] .
+
+  --- State tracking
+  sorts NetProcAndPort NetProcAndPortSet .
+  subsorts NetProcAndPort < NetProcAndPortSet .
+  op npap : NetProcInfo Nat -> NetProcAndPort [ctor] .
+  op mtNPAP : -> NetProcAndPortSet [ctor] .
+  op _,_ : NetProcAndPortSet NetProcAndPortSet -> NetProcAndPortSet [ctor assoc comm id: mtNPAP] .
+
+  vars NPAP NPAP' : NetProcAndPortSet .
+
+  op StateTracker : -> Cid [ctor] .
+  op stateTracker : -> Oid [ctor] .
+  op lastNetlabels:_ : NetProcInfoSet -> Attribute [ctor] .
+  op procAndPort:_ : NetProcAndPortSet -> Attribute [ctor] .
+  op nextPort:_ : Nat -> Attribute [ctor] .
+
   op start : -> Configuration .
   rl [start] : 
     start 
@@ -912,6 +932,7 @@ mod IBOS-EXTEND is
     <>
     < socketClient : SocketClient | state: connecting, name: noname, read: "" >
     createClientTcpSocket(socketManager, socketClient, "localhost", 8080)
+    < stateTracker : StateTracker | lastNetlabels: mtNPIS, procAndPort: mtNPAP, nextPort: 8081 >
 
     < ui | toKernel(msg(ui,webapp, MSG-NEW-URL, url("0")) @ mt) >
     < display | activeWebapp(none), displayedContent(about-blank) >
@@ -926,6 +947,24 @@ mod IBOS-EXTEND is
                   policy(ui,     webapp, MSG-NEW-URL   ),ps
                   policy(ui,     webapp, MSG-SWITCH-TAB),ps
                   policy(network,webapp, MSG-RETURN-URL)) >
+    .
+
+  op debug : String -> Msg [ctor msg] .
+
+  crl [newNetworkApp] :
+    < stateTracker : StateTracker | lastNetlabels: NPIS, procAndPort: NPAP, nextPort: N, Att >
+    < kernel | netlabels((NPI ,np NPIS')), Att2 > 
+  =>
+    < stateTracker : StateTracker | 
+      lastNetlabels: (NPI ,np NPIS),
+      procAndPort: (NPAP , npap(NPI, N)), 
+      nextPort: (N + 1),
+      Att >
+    < kernel | netlabels((NPI ,np NPIS')), Att2 >
+    createSocketServer(N, S')
+  if
+    not NPI in NPIS /\
+    pi(CNPID, url(S, S'), url(S, S')) := NPI
     .
 
   rl [createdSocket] : 

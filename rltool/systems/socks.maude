@@ -78,15 +78,6 @@ mod SOCKS is
   op portToBytes : Nat -> String .
   eq portToBytes(N) = char(N quo (2 ^ 8)) + char(N rem (2 ^ 8)) .
 
-  op start : -> Configuration .
-  rl [start] :
-    start
-  =>
-    <>
-    --- news.ycombinator.com
-    createSocketServer(8082, "209.216.230.240")
-    .
-
   rl [createSocketServer] :
     createSocketServer(N, S)
   =>
