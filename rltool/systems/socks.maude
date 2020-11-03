@@ -7,7 +7,7 @@ mod SOCKS is
   pr SOCKET .
   pr CONVERSION .
   
-  op debug : String -> Msg [ctor msg] .
+  ---op debug : String -> Msg [ctor msg] .
   ---op debug : Nat -> Msg [ctor msg] .
 
   op SocketServer : -> Cid [ctor] .
