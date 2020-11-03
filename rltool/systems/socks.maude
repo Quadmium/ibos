@@ -1,0 +1,108 @@
+load socket.maude
+
+mod SOCKS is
+  pr CONFIGURATION .
+  pr NAT .
+  pr INT .
+  pr SOCKET .
+
+  op SocketServer : -> Cid [ctor] .
+  op socketServer : -> Oid [ctor] .
+
+  op SocksClient : -> Cid [ctor] .
+  op socksClient : Nat -> Oid [ctor] .
+
+  --- Socks client attributes
+  op originServer:_ : Oid -> Attribute [ctor] .
+  
+  sort SocksClientState .
+  ops connected waitingForHeader : -> SocksClientState [ctor] .
+  op readingMethods : Int -> SocksClientState [ctor] .
+  op state:_ : SocksClientState -> Attribute [ctor] .
+  op read:_ : String -> Attribute [ctor] .
+
+  --- Server attributes
+  op socketName:_ : Oid -> Attribute [ctor] .
+  op nextClientID:_ : Nat -> Attribute [ctor] .
+
+  vars SocketName Me NewSocketName : Oid .
+  vars S S' Address Data Rest : String .
+  vars N N' N'' : Nat .
+  vars I I' I'' : Int .
+  vars Att : AttributeSet .
+
+  rl [receive] :
+    < Me : SocksClient | socketName: SocketName, read: S, Att >
+    received(Me, SocketName, S')
+  =>
+    < Me : SocksClient | socketName: SocketName, read: (S + S'), Att >
+    receive(SocketName, Me)
+    .
+
+  op start : -> Configuration .
+  rl [start] :
+    start
+  =>
+    <>
+    < socketServer : SocketServer | none >
+    createServerTcpSocket(socketManager, socketServer, 8082, 5)
+    .
+
+  rl [createdSocket] :
+    < Me : SocketServer | none >
+    createdSocket(Me, socketManager, SocketName)
+  =>
+    < Me : SocketServer | socketName: SocketName, nextClientID: 0 >
+    acceptClient(SocketName, Me)
+    .
+
+  rl [acceptedClient] :
+    < Me : SocketServer | socketName: SocketName, nextClientID: N >
+    acceptedClient(Me, SocketName, Address, NewSocketName)
+  =>
+    < Me : SocketServer | socketName: SocketName, nextClientID: (N + 1) >
+    ---acceptClient(SocketName, Me)
+    < socksClient(N) : SocksClient | socketName: NewSocketName, state: connected, read: "" >
+    .
+
+  rl [waitForGreeting] : 
+    < Me : SocksClient | socketName: SocketName, state: connected, Att >
+  =>
+    receive(SocketName, Me)
+    < Me : SocksClient | socketName: SocketName, state: waitingForHeader, Att >
+    .
+  
+  crl [receiveHeader1] :
+    < Me : SocksClient | socketName: SocketName, state: waitingForHeader, read: S, Att >
+  =>
+    < Me : SocksClient | socketName: SocketName, state: readingMethods(N), read: Rest, Att >
+  if
+    length(S) >= 2 /\
+    Data := substr(S, 0, 2) /\
+    Rest := substr(S, 2, length(S)) /\
+    N := ascii(substr(Data, 1, 1))
+    .
+  
+  crl [receiveHeaderMethods] :
+    < Me : SocksClient | socketName: SocketName, state: readingMethods(I), read: S, Att >
+  =>
+    < Me : SocksClient | socketName: SocketName, state: readingMethods(I - I'), read: Rest, Att >
+  if
+    length(S) > 0 /\
+    I > 0 /\
+    I' := min(I, length(S)) /\
+    Rest := substr(S, I', length(S))
+    .
+
+  rl [finishedReadingHeader] :
+    < Me : SocksClient | socketName: SocketName, state: readingMethods(0), Att >
+  =>
+    < Me : SocksClient | socketName: SocketName, state: readingMethods(5), Att >
+    send(SocketName, Me, char(5) + char(0))
+  .
+
+  --- two chars to short in big endian b2|b1 -> b2 * 2^8 + b1
+
+endm
+
+eof
