@@ -1,5 +1,16 @@
 load socket.maude
 
+***(
+op start : -> Configuration .
+rl [start] :
+  start
+=>
+  <>
+  --- news.ycombinator.com
+  createSocketServer(8082, "209.216.230.240")
+  .
+)
+
 mod SOCKS is
   pr CONFIGURATION .
   pr NAT .
@@ -10,8 +21,13 @@ mod SOCKS is
   ---op debug : String -> Msg [ctor msg] .
   ---op debug : Nat -> Msg [ctor msg] .
 
+  --- SocketServer(port)
   op SocketServer : -> Cid [ctor] .
-  op socketServer : -> Oid [ctor] .
+  op socketServer : Nat -> Oid [ctor] .
+
+  --- createSocketServer(port, whitelisted address)
+  op createSocketServer : Nat String -> Msg [ctor msg] .
+  op createdSocketServer : Nat -> Msg [ctor msg] .
 
   op SocksClient : -> Cid [ctor] .
   op socksClient : Nat Oid -> Oid [ctor] .
@@ -20,7 +36,7 @@ mod SOCKS is
   op originServer:_ : Oid -> Attribute [ctor] .
   
   sort SocksClientState .
-  ops connected waitingForHeader readingRequest1 readingRequest2 readingRequestIPV4 readingRequestSTR readingPort shouldClose openingTunnel waitingOpenTunnel tunneling tunnelingDisconnected closed : -> SocksClientState [ctor] .
+  ops connected waitingForHeader readingRequest1 readingRequest2 readingRequestIPV4 readingRequestSTR checkingWhitelist readingPort shouldClose openingTunnel waitingOpenTunnel tunneling tunnelingDisconnected closed : -> SocksClientState [ctor] .
   op readingMethods : Int -> SocksClientState [ctor] .
   op state:_ : SocksClientState -> Attribute [ctor] .
   op read:_ : String -> Attribute [ctor] .
@@ -28,6 +44,8 @@ mod SOCKS is
   op address:_ : String -> Attribute [ctor] .
   op port:_ : Nat -> Attribute [ctor] .
   op tunnelSocketName:_ : Oid -> Attribute [ctor] .
+
+  op whitelistedAddress:_ : String -> Attribute [ctor] .
 
   --- Server attributes
   op socketName:_ : Oid -> Attribute [ctor] .
@@ -37,7 +55,7 @@ mod SOCKS is
   vars S S' Address Data Rest : String .
   vars N N' N'' N''' Len : Nat .
   vars I I' I'' : Int .
-  vars Att : AttributeSet .
+  vars Att Att' : AttributeSet .
   var STATE : SocksClientState .
 
   op findNth : String String Nat Nat -> FindResult .
@@ -59,6 +77,23 @@ mod SOCKS is
 
   op portToBytes : Nat -> String .
   eq portToBytes(N) = char(N quo (2 ^ 8)) + char(N rem (2 ^ 8)) .
+
+  op start : -> Configuration .
+  rl [start] :
+    start
+  =>
+    <>
+    --- news.ycombinator.com
+    createSocketServer(8082, "209.216.230.240")
+    .
+
+  rl [createSocketServer] :
+    createSocketServer(N, S)
+  =>
+    < socketServer(N) : SocketServer | whitelistedAddress: S >
+    createdSocketServer(N)
+    createServerTcpSocket(socketManager, socketServer(N), N, 5)
+    .
 
   rl [receive] :
     < Me : SocksClient | socketName: SocketName, read: S, Att >
@@ -109,28 +144,19 @@ mod SOCKS is
     closeSocket(SocketName, Me)
     .
 
-  op start : -> Configuration .
-  rl [start] :
-    start
-  =>
-    <>
-    < socketServer : SocketServer | none >
-    createServerTcpSocket(socketManager, socketServer, 8082, 5)
-    .
-
   rl [createdSocket] :
-    < Me : SocketServer | none >
+    < Me : SocketServer | Att >
     createdSocket(Me, socketManager, SocketName)
   =>
-    < Me : SocketServer | socketName: SocketName, nextClientID: 0 >
+    < Me : SocketServer | socketName: SocketName, nextClientID: 0, Att >
     acceptClient(SocketName, Me)
     .
 
   rl [acceptedClient] :
-    < Me : SocketServer | socketName: SocketName, nextClientID: N >
+    < Me : SocketServer | socketName: SocketName, nextClientID: N, Att >
     acceptedClient(Me, SocketName, Address, NewSocketName)
   =>
-    < Me : SocketServer | socketName: SocketName, nextClientID: (N + 1) >
+    < Me : SocketServer | socketName: SocketName, nextClientID: (N + 1), Att >
     acceptClient(SocketName, Me)
     < socksClient(N, Me) : SocksClient | socketName: NewSocketName, state: connected, read: "" >
     .
@@ -198,7 +224,7 @@ mod SOCKS is
   crl [readRequestIPV4] :
     < Me : SocksClient | state: readingRequestIPV4, read: S, Att >
   =>
-    < Me : SocksClient | state: readingPort, read: Rest, addressType: 1, address: S', Att >
+    < Me : SocksClient | state: checkingWhitelist, read: Rest, addressType: 1, address: S', Att >
   if
     length(S) >= 4 /\
     Data := substr(S, 0, 4) /\
@@ -213,13 +239,21 @@ mod SOCKS is
   crl [readRequestSTR] :
     < Me : SocksClient | state: readingRequestSTR, read: S, Att >
   =>
-    < Me : SocksClient | state: readingPort, read: Rest, addressType: 3, address: S', Att >
+    < Me : SocksClient | state: checkingWhitelist, read: Rest, addressType: 3, address: S', Att >
   if
     length(S) >= 1 /\
     Len := ascii(substr(S, 0, 1)) /\
     length(S) >= 1 + Len /\
     S' := substr(S, 1, Len) /\
     Rest := substr(S, 1 + Len, length(S))
+    .
+
+  rl [checkWhitelist] :
+    < Me : SocketServer | whitelistedAddress: S, Att >
+    < socksClient(N, Me) : SocksClient | state: checkingWhitelist, address: S', Att' >
+  =>
+    < Me : SocketServer | whitelistedAddress: S, Att >
+    < socksClient(N, Me) : SocksClient | state: (if S == S' then readingPort else shouldClose fi), address: S', Att' >
     .
 
   crl [readPort] :
