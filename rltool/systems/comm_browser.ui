@@ -20,8 +20,9 @@
     </child>
     <child>
       <object class="ttk.Entry" id="url_entry">
-        <property name="text" translatable="yes">google.com</property>
+        <property name="text" translatable="yes">www.google.com</property>
         <property name="textvariable">string:url_entry_text</property>
+        <property name="validate">focus</property>
         <layout manager="place">
           <property name="anchor">nw</property>
           <property name="width">290</property>

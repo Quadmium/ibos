@@ -51,8 +51,7 @@ class Application(pygubu.TkApplication):
 
         self.tabs = {}
 
-        self.tab_ctr = 0
-        self.cur_tab = 0
+        self.cur_tab = -100
 
         self.open_webapps = {}
         self.last_webapp = 0
@@ -126,7 +125,8 @@ class Application(pygubu.TkApplication):
         self.builder.get_object("app_combobox").bind('<<ComboboxSelected>>', self.on_app_combobox_select)
         self.builder.get_variable("app_combobox_text").set(state[1])
 
-        if int(state[1]) - 1 != self.cur_tab:
+        if int(state[1]) - 1 != self.cur_tab and int(state[1]) != 0:
+            self.set_url_text(state[0].split(", ")[0])
             self.cur_tab = int(state[1]) - 1
 
             for tid in self.tabs:
