@@ -60,13 +60,8 @@ class Application(pygubu.TkApplication):
         self.connect()
 
     def on_exit(self):
-        os.system("for i in $(ps -eaf | grep firefox | awk '{print $2}'); do kill -9 $i; done")
         for tid in self.tabs:
             self.tabs[tid].kill()
-        try:
-            master.destroy()
-        except:
-            pass
 
     def run(self):
         self.update_loop()
@@ -161,5 +156,8 @@ class Application(pygubu.TkApplication):
 if __name__ == '__main__':
     root = tk.Tk()
     app = Application(root)
-    atexit.register(app.on_exit)
+    def ex():
+        os.system("for i in $(ps -eaf | grep firefox | awk '{print $2}'); do kill -9 $i; done")
+        app.on_exit()
+    atexit.register(ex)
     app.run()
