@@ -1,0 +1,224 @@
+mod SOCKET is
+pr STRING .
+pr CONVERSION .
+inc CONFIGURATION .
+
+op socket : Nat -> Oid [ctor] .
+
+op createClientTcpSocket : Oid Oid String Nat -> Msg [ctor msg format (b o)] .
+op createServerTcpSocket : Oid Oid Nat Nat -> Msg [ctor msg format (b o)] .
+op createdSocket : Oid Oid Oid -> Msg [ctor msg format (m o)] .
+
+op acceptClient : Oid Oid -> Msg [ctor msg format (b o)] .
+op acceptedClient : Oid Oid String Oid -> Msg [ctor msg format (m o)] .
+
+op send : Oid Oid String -> Msg [ctor msg format (b o)] .
+op sent : Oid Oid -> Msg [ctor msg format (m o)] .
+
+op receive : Oid Oid -> Msg [ctor msg format (b o)] .
+op received : Oid Oid String -> Msg [ctor msg format (m o)] .
+
+op closeSocket : Oid Oid -> Msg [ctor msg format (b o)] .
+op closedSocket : Oid Oid String -> Msg [ctor msg format (m o)] .
+
+op socketError : Oid Oid String -> Msg [ctor msg format (r o)] .
+
+--- Set for socket connections
+
+sort Connection ConnectionSet .
+subsorts Connection < ConnectionSet .
+
+vars C : Connection .
+vars CS CS' : ConnectionSet .
+
+op connectionFromTo : Nat Nat -> Connection [ctor] .
+
+--- sock(N) Address Port ResponseBuffer
+--- TODO(vijaygk2): Consider Nat -> Socket wdyt?
+op externalConnectionFromTo : Nat String Nat String -> Connection [ctor] .
+
+op mtCS : -> ConnectionSet [ctor] .
+op _,_ : ConnectionSet ConnectionSet -> ConnectionSet [ctor assoc comm id: mtCS] .
+
+op _in_ : Connection ConnectionSet -> Bool .
+eq C in (C, CS) = true .
+eq C in CS = false [owise] .
+
+--- Set for local server info
+sorts LocalServer LocalServerSet .
+subsorts LocalServer < LocalServerSet .
+
+vars LS : LocalServer .
+vars LSS : LocalServerSet .
+
+--- socket(N), port
+op localServer : Nat Nat -> LocalServer [ctor] .
+
+op mtLSS : -> LocalServerSet [ctor] .
+op _,_ : LocalServerSet LocalServerSet -> LocalServerSet [ctor assoc comm id: mtLSS] .
+
+op socketManager : -> Oid [ctor] .
+op SocketManager : -> Cid [ctor] .
+
+op nextNumber:_ : Nat -> Attribute [ctor] .
+
+op connections:_ : ConnectionSet -> Attribute [ctor] .
+op localServers:_ : LocalServerSet -> Attribute [ctor] .
+
+vars SM Me : Oid .
+vars Address S S' Buffer Delim Data Rest : String .
+vars Port Backlog N SockNum : Nat .
+vars Att : AttributeSet .
+vars B : Bool .
+
+***(
+op insertIf : ConnectionSet Connection Bool -> ConnectionSet .
+ceq insertIf(CS, C, B) = CS, C if B .
+ceq insertIf(CS, C, B) = CS    if not B .
+)
+
+op isLocal : String -> Bool .
+eq isLocal(S) = (S == "127.0.0.1") .
+
+--- debug
+
+op start : -> Msg [ctor] .
+op me : -> Oid [ctor] .
+
+rl [start] :
+  start
+=>
+  < socketManager : SocketManager | 
+    nextNumber: 0, 
+    connections: mtCS,
+    localServers: mtLSS >
+  --- createServerTcpSocket(socketManager, me, 25123, 5)
+  --- createClientTcpSocket(socketManager, me, "127.0.0.1", 25123)
+  createClientTcpSocket(socketManager, me, "127.0.0.2", 25123)
+  createClientTcpSocket(socketManager, me, "127.0.0.3", 25124)
+  send(socket(1), me, "sup")
+  send(socket(0), me, "hello")
+  receive(socket(1), me)
+  receive(socket(0), me)
+  .
+
+op untilDelim : String String -> String .
+op afterDelim : String String -> String .
+
+ceq untilDelim(S, Delim) = Data if 
+  N    := find(S, Delim, 0) /\
+  Data := substr(S, 0, N) .
+
+ceq afterDelim(S, Delim) = Data if 
+  N    := find(S, Delim, 0) /\
+  Data := substr(S, N + 1, length(S)) .
+
+op isBufferFullOf : String String -> Bool .
+
+eq isBufferFullOf("", S) = true .
+ceq isBufferFullOf(S, S') =
+  Data == S' and isBufferFullOf(Rest, S')
+if
+  Data := untilDelim(S, "#") /\
+  Rest := afterDelim(S, "#") /\
+  length(S) > 0
+  . 
+
+var Config : Configuration .
+
+op I : Configuration -> Bool .
+
+eq I(
+  received(Me, socket(N), S) 
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
+    Att >
+  Config) = isBufferFullOf(S,  Address + ":" + string(Port, 10)) and I(Config) .
+
+eq I(Config) = true [owise] .
+
+--- TODO(vijaygk2) recursive function that checks all recvs are FULL OF and uses recusion to call I(rest of config)
+
+--- end debug
+
+--- Socket creation rules
+
+--- TODO(vijaygk2): AcceptClient should be used to check the server is even wanting to accept a client right now before we allow this rule
+--- need an acceptclient pending set and remove from it once this rule runs, add when server says acceptclient
+crl [createClientTcpSocketMsgLocalClient] :
+  < SM : SocketManager | 
+    nextNumber: N, 
+    connections: CS, 
+    localServers: (localServer(SockNum, Port), LSS),
+    Att >
+  createClientTcpSocket(SM, Me, Address, Port)
+=>
+  < SM : SocketManager | 
+    nextNumber: s(N),
+    connections: (CS, connectionFromTo(N, SockNum)),
+    localServers: (localServer(SockNum, Port), LSS),
+    Att >
+  createdSocket(Me, SM, socket(N))
+if
+  isLocal(Address)
+  .
+
+crl [createClientTcpSocketMsgExternalClient] :
+  < SM : SocketManager | 
+    nextNumber: N, 
+    connections: CS, 
+    Att >
+  createClientTcpSocket(SM, Me, Address, Port)
+=>
+  < SM : SocketManager | 
+    nextNumber: s(N),
+    connections: (CS, externalConnectionFromTo(N, Address, Port, "")),
+    Att >
+  createdSocket(Me, SM, socket(N))
+if
+  not isLocal(Address)
+  .
+
+rl [createServerTcpSocketMsg] :
+  < SM : SocketManager | 
+    nextNumber: N, 
+    localServers: LSS,
+    Att >
+  createServerTcpSocket(SM, Me, Port, Backlog)
+=>
+  < SM : SocketManager | 
+    nextNumber: s(N), 
+    localServers: (LSS, localServer(N, Port)),
+    Att >
+  createdSocket(Me, SM, socket(N))
+  .
+
+--- External client reply rules
+
+rl [sendExternalSocket] :
+  send(socket(N), Me, S)
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
+    Att >
+=>
+  sent(Me, socket(N))
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, Buffer + Address + ":" + string(Port, 10) + "#"), CS), 
+    Att >
+  .
+
+crl [receiveExternalSocket] :
+  receive(socket(N), Me)
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
+    Att >
+=>
+  received(Me, socket(N), Buffer)
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, ""), CS), 
+    Att >
+if
+  length(Buffer) > 0
+  .
+
+endm
