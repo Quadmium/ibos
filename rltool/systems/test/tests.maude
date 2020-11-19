@@ -145,13 +145,53 @@ rl [sendWebsiteMsg] :
   < Me : Client | state: readingWebsiteMsg, socketName: SocketName, Att >
   .
 
-
 endm
 
 mod TEST is
 pr CONFIGURATION .
 pr SOCKS .
 pr CLIENT .
+
+vars S S' Delim Data Address Rest : String .
+vars N Port : Nat .
+vars Me : Oid .
+vars Att : AttributeSet .
+
+--- Invariants for testing
+op untilDelim : String String -> String .
+op afterDelim : String String -> String .
+
+ceq untilDelim(S, Delim) = Data if 
+  N    := find(S, Delim, 0) /\
+  Data := substr(S, 0, N) .
+
+ceq afterDelim(S, Delim) = Data if 
+  N    := find(S, Delim, 0) /\
+  Data := substr(S, N + 1, length(S)) .
+
+op isBufferFullOf : String String -> Bool .
+
+eq isBufferFullOf("", S) = true .
+ceq isBufferFullOf(S, S') =
+  Data == S' and isBufferFullOf(Rest, S')
+if
+  Data := untilDelim(S, "#") /\
+  Rest := afterDelim(S, "#") /\
+  length(S) > 0
+  . 
+
+var Config : Configuration .
+
+op I : State -> Bool .
+
+eq I(
+  {
+    < Me : Client | state: readingWebsiteMsg, address: Address, port: Port, read: S, Att >
+    Config
+  }) = isBufferFullOf(S,  Address + ":" + string(Port, 10)) and I({Config}) .
+
+eq I({Config}) = true [owise] .
+--- End invariants
 
 op start : -> Configuration [ctor] .
 
