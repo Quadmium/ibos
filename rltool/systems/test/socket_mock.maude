@@ -3,6 +3,9 @@ pr STRING .
 pr CONVERSION .
 inc CONFIGURATION .
 
+sort State .
+op {_} : Configuration -> State [ctor] .
+
 op socket : Nat -> Oid [ctor] .
 
 op createClientTcpSocket : Oid Oid String Nat -> Msg [ctor msg format (b o)] .
@@ -82,6 +85,10 @@ op localServers:_ : LocalServerSet -> Attribute [ctor] .
 op isLocal : String -> Bool .
 eq isLocal(S) = (S == "127.0.0.1") .
 
+op socketManagerInConfig : Configuration -> Bool .
+eq socketManagerInConfig(< SM : SocketManager | Att > Config) = true .
+eq socketManagerInConfig(Config) = false [owise] .
+
 --- debug
 
 op start : -> Msg [ctor] .
@@ -159,15 +166,23 @@ eq I(Config) = true [owise] .
 
 --- end debug
 
---- Create the socket manager if not exist (by vandalizing the portal which we don't use anyway and is required for external objects)
---- TODO: is this okay?
-rl [createSocketManager] :
-  <>
+--- Create the socket manager if not exist
+--- By wrapping configuration in { } ("State"), we prevent partial matches i.e.
+--- A socket manager will always be created if we just matched Config, since maude can
+--- match any sub-config without the socket manager and apply the rule.
+--- This allows us to check something on the global state, but means we have to start our 
+--- program using rew {start} . instead of rew start .
+crl [createSocketManager] :
+  { Config }
 =>
-  < socketManager : SocketManager | 
+  { < socketManager : SocketManager | 
     nextNumber: 0, 
     connections: mtCS,
     localServers: mtLSS >
+    Config
+  }
+if
+  not socketManagerInConfig(Config)
   .
 
 --- Socket creation rules
