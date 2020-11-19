@@ -31,7 +31,14 @@ subsorts Connection < ConnectionSet .
 vars C : Connection .
 vars CS CS' : ConnectionSet .
 
-op connectionFromTo : Nat Nat -> Connection [ctor] .
+vars SM Me Me' : Oid .
+vars Address S S' Buffer Buffer' Delim Data Rest : String .
+vars Port Backlog N N' SockNum : Nat .
+vars Att : AttributeSet .
+vars B : Bool .
+
+--- Sending socket, receiving socket, buffer for receiving
+op connectionFromTo : Nat Nat String -> Connection [ctor] .
 
 --- sock(N) Address Port ResponseBuffer
 --- TODO(vijaygk2): Consider Nat -> Socket wdyt?
@@ -43,6 +50,13 @@ op _,_ : ConnectionSet ConnectionSet -> ConnectionSet [ctor assoc comm id: mtCS]
 op _in_ : Connection ConnectionSet -> Bool .
 eq C in (C, CS) = true .
 eq C in CS = false [owise] .
+
+op containsConnectionWith : Nat ConnectionSet -> Bool .
+
+eq containsConnectionWith(N, (connectionFromTo(N, N', Buffer), CS)) = true .
+eq containsConnectionWith(N, (connectionFromTo(N', N, Buffer), CS)) = true .
+eq containsConnectionWith(N, (externalConnectionFromTo(N, Address, Port, Buffer), CS)) = true .
+eq containsConnectionWith(N, CS) = false [owise] .
 
 --- Set for local server info
 sorts LocalServer LocalServerSet .
@@ -65,18 +79,6 @@ op nextNumber:_ : Nat -> Attribute [ctor] .
 op connections:_ : ConnectionSet -> Attribute [ctor] .
 op localServers:_ : LocalServerSet -> Attribute [ctor] .
 
-vars SM Me : Oid .
-vars Address S S' Buffer Delim Data Rest : String .
-vars Port Backlog N SockNum : Nat .
-vars Att : AttributeSet .
-vars B : Bool .
-
-***(
-op insertIf : ConnectionSet Connection Bool -> ConnectionSet .
-ceq insertIf(CS, C, B) = CS, C if B .
-ceq insertIf(CS, C, B) = CS    if not B .
-)
-
 op isLocal : String -> Bool .
 eq isLocal(S) = (S == "127.0.0.1") .
 
@@ -84,7 +86,10 @@ eq isLocal(S) = (S == "127.0.0.1") .
 
 op start : -> Msg [ctor] .
 op me : -> Oid [ctor] .
+op me' : -> Oid [ctor] .
 
+--- search start =>* X:Configuration s.t. not I(X:Configuration) .
+***(
 rl [start] :
   start
 =>
@@ -94,13 +99,28 @@ rl [start] :
     localServers: mtLSS >
   --- createServerTcpSocket(socketManager, me, 25123, 5)
   --- createClientTcpSocket(socketManager, me, "127.0.0.1", 25123)
-  createClientTcpSocket(socketManager, me, "127.0.0.2", 25123)
-  createClientTcpSocket(socketManager, me, "127.0.0.3", 25124)
-  send(socket(1), me, "sup")
-  send(socket(0), me, "hello")
-  receive(socket(1), me)
-  receive(socket(0), me)
+  
+  --- createClientTcpSocket(socketManager, me, "127.0.0.2", 25123)
+  --- createClientTcpSocket(socketManager, me, "127.0.0.3", 25124)
+  --- send(socket(1), me, "sup")
+  --- send(socket(0), me, "hello")
+  --- receive(socket(1), me)
+  --- receive(socket(0), me)
+
+  createServerTcpSocket(socketManager, me, 25123, 5)
+  acceptClient(socket(0), me)
+  createClientTcpSocket(socketManager, me', "127.0.0.1", 25123)
   .
+
+rl [start2] :
+  acceptedClient(me, socket(0), "127.0.0.1", socket(2))
+=>
+  send(socket(1), me', "hi1")
+  receive(socket(2), me)
+  send(socket(2), me, "hi2")
+  receive(socket(1), me)
+  .
+)
 
 op untilDelim : String String -> String .
 op afterDelim : String String -> String .
@@ -137,28 +157,37 @@ eq I(
 
 eq I(Config) = true [owise] .
 
---- TODO(vijaygk2) recursive function that checks all recvs are FULL OF and uses recusion to call I(rest of config)
-
 --- end debug
+
+--- Create the socket manager if not exist (by vandalizing the portal which we don't use anyway and is required for external objects)
+--- TODO: is this okay?
+rl [createSocketManager] :
+  <>
+=>
+  < socketManager : SocketManager | 
+    nextNumber: 0, 
+    connections: mtCS,
+    localServers: mtLSS >
+  .
 
 --- Socket creation rules
 
---- TODO(vijaygk2): AcceptClient should be used to check the server is even wanting to accept a client right now before we allow this rule
---- need an acceptclient pending set and remove from it once this rule runs, add when server says acceptclient
 crl [createClientTcpSocketMsgLocalClient] :
   < SM : SocketManager | 
     nextNumber: N, 
     connections: CS, 
     localServers: (localServer(SockNum, Port), LSS),
     Att >
+  acceptClient(socket(SockNum), Me')
   createClientTcpSocket(SM, Me, Address, Port)
 =>
   < SM : SocketManager | 
-    nextNumber: s(N),
-    connections: (CS, connectionFromTo(N, SockNum)),
+    nextNumber: s(s(N)),
+    connections: (CS, connectionFromTo(N, s(N), ""), connectionFromTo(s(N), N, "")),
     localServers: (localServer(SockNum, Port), LSS),
     Att >
   createdSocket(Me, SM, socket(N))
+  acceptedClient(Me', socket(SockNum), "127.0.0.1", socket(s(N)))
 if
   isLocal(Address)
   .
@@ -219,6 +248,91 @@ crl [receiveExternalSocket] :
     Att >
 if
   length(Buffer) > 0
+  .
+
+--- Local sockets send and receive
+rl [sendLocalSocket] :
+  send(socket(N), Me, S)
+  < SM : SocketManager |
+    connections: (connectionFromTo(N, N', Buffer), CS), 
+    Att >
+=>
+  sent(Me, socket(N))
+  < SM : SocketManager |
+    connections: (connectionFromTo(N, N', Buffer + S), CS), 
+    Att >
+  .
+
+crl [receiveLocalSocket] :
+  receive(socket(N'), Me)
+  < SM : SocketManager |
+    connections: (connectionFromTo(N, N', Buffer), CS), 
+    Att >
+=>
+  received(Me, socket(N'), Buffer)
+  < SM : SocketManager |
+    connections: (connectionFromTo(N, N', ""), CS), 
+    Att >
+if
+  length(Buffer) > 0
+  .
+
+--- Close socket
+rl [closeExternalSocket] : 
+  closeSocket(socket(N), Me)
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
+    Att >
+=>
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+  closedSocket(Me, socket(N), "")
+  .
+
+rl [closeLocalSocket] : 
+  closeSocket(socket(N), Me)
+  < SM : SocketManager |
+    connections: (connectionFromTo(N, N', Buffer), connectionFromTo(N', N, Buffer'), CS), 
+    Att >
+=>
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+  closedSocket(Me, socket(N), "")
+  .
+
+--- Reply with closedSocket if connections don't exist
+--- Only for local, since external socket cannot be closed by the website's end
+--- TODO: some of the behavior on socks.maude handles the website closing once reply is done, what do we want to do? Close immediately after sending a reply?
+--- (while local either party can close the socket)
+
+crl [sendLocalSocketNotExist] :
+  send(socket(N), Me, S)
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+=>
+  closedSocket(Me, socket(N), "")
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+if
+  not containsConnectionWith(N, CS)
+  .
+
+crl [receiveLocalSocketNotExist] :
+  receive(socket(N), Me)
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+=>
+  closedSocket(Me, socket(N), "")
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+if
+  not containsConnectionWith(N, CS)
   .
 
 endm

@@ -1,4 +1,4 @@
-load socket.maude
+load socket_mock.maude
 
 ***(
 op start : -> Configuration .

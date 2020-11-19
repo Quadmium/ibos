@@ -1,0 +1,16 @@
+load socks.maude
+
+mod TEST is
+pr CONFIGURATION .
+pr SOCKS .
+
+op start : -> Configuration [ctor] .
+
+rl [start] :
+  start
+=>
+  <>
+  createSocksServer(1234, "100.101.102.103")
+  .
+
+endm
