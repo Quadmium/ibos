@@ -156,9 +156,9 @@ mod SOCKS is
     < Me : SocksClient | socketName: SocketName, state: connected, Att >
   =>
     receive(SocketName, Me)
-    < Me : SocksClient | socketName: SocketName, state: waitingForHeader, Att >
+    < Me : SocksClient | socketName: SocketName, state: readingRequest1, Att >
     .
-  
+***(
   crl [receiveHeader1] :
     < Me : SocksClient | state: waitingForHeader, read: S, Att >
   =>
@@ -187,7 +187,7 @@ mod SOCKS is
     < Me : SocksClient | socketName: SocketName, state: readingRequest1, Att >
     send(SocketName, Me, char(5) + char(0))
   .
-
+)
   crl [readRequest1] :
     < Me : SocksClient | state: readingRequest1, read: S, Att >
   =>
