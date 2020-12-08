@@ -1,10 +1,10 @@
+load ancestor.maude
+
 mod SOCKET is
+pr ANCESTOR .
 pr STRING .
 pr CONVERSION .
 inc CONFIGURATION .
-
-sort State .
-op {_} : Configuration -> State [ctor] .
 
 op socket : Nat -> Oid [ctor] .
 
@@ -91,9 +91,9 @@ eq socketManagerInConfig(Config) = false [owise] .
 
 --- debug
 
-op start : -> Msg [ctor] .
-op me : -> Oid [ctor] .
-op me' : -> Oid [ctor] .
+---op start : -> Msg [ctor] .
+---op me : -> Oid [ctor] .
+---op me' : -> Oid [ctor] .
 
 --- search start =>* X:Configuration s.t. not I(X:Configuration) .
 ***(

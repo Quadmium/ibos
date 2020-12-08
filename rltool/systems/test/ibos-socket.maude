@@ -1,4 +1,5 @@
-load socket.maude
+load ancestor.maude
+load socket_mock.maude
 load socks.maude
 
 --- The identity operators include:
@@ -151,9 +152,10 @@ mod PROC-ID is
 endm
 
 mod SYS is
+  pr ANCESTOR .
   pr PROC-ID .
   inc CONFIGURATION .
-  sorts EmptyConfiguration NeConfiguration State .
+  sorts EmptyConfiguration NeConfiguration .
   sorts EmptyAttributeSet NeAttributeSet .
   subsorts Object < NeConfiguration < Configuration .
   subsort  EmptyConfiguration < Configuration .
@@ -168,7 +170,7 @@ mod SYS is
   op __    : NeConfiguration Configuration         -> NeConfiguration    [ctor ditto metadata "36"] .
   op __    : EmptyConfiguration EmptyConfiguration -> EmptyConfiguration [ctor ditto metadata "36"] .
   op none  :                                       -> EmptyConfiguration [ctor metadata "2"] .
-  op {_}   : Configuration                         -> State              [ctor metadata "37"] .
+  ---op {_}   : Configuration                         -> State              [ctor metadata "37"] .
 endm
 
 mod LABEL is pr NAT-NO-BUILTIN .
@@ -925,11 +927,11 @@ mod IBOS-EXTEND is
   op procAndPort:_ : NetProcAndPortSet -> Attribute [ctor] .
   op nextPort:_ : Nat -> Attribute [ctor] .
 
-  op start : -> Configuration .
-  rl [start] : 
-    start 
+  op startIBOS : -> Configuration .
+  rl [startIBOS] : 
+    startIBOS
   =>
-    <>
+    ---<>
     < socketClient : SocketClient | state: connecting, name: noname, read: "" >
     createClientTcpSocket(socketManager, socketClient, "127.0.0.1", 8080)
     < stateTracker : StateTracker | lastNetlabels: mtNPIS, procAndPort: mtNPAP, nextPort: 8081 >

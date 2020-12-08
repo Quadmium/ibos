@@ -1,4 +1,5 @@
 load socks.maude
+load ibos-socket.maude
 
 mod CLIENT is
 pr CONFIGURATION .
@@ -63,7 +64,6 @@ crl [createClientManager] :
     < clientManager : ClientManager | nextNumber: 0 >
     Config
   }
-
 if
   not clientManagerInConfig(Config)
   .
@@ -94,7 +94,7 @@ rl [sent] :
 rl [connectToServer] :
   < Me : Client | state: initial, address: Address, port: Port, Att >
 =>
-  createClientTcpSocket(socketManager, Me, "127.0.0.1", 1234)
+  createClientTcpSocket(socketManager, Me, "127.0.0.1", 8081)
   < Me : Client | state: connecting, address: Address, port: Port, Att >
   .
 
@@ -147,10 +147,53 @@ rl [sendWebsiteMsg] :
 
 endm
 
+mod UI is
+pr CONFIGURATION .
+pr CLIENT .
+
+op UI : -> Cid .
+op ui : -> Oid .
+
+op serverSocket:_ : Oid -> Attribute [ctor] .
+op ibosSocket:_ : Oid -> Attribute [ctor] .
+
+vars Att : AttributeSet .
+vars Sock NewSock : Oid .
+
+op createUI : -> Msg [ctor] .
+
+rl [createUI] : 
+  createUI 
+=> 
+  < ui : UI | none >
+  createServerTcpSocket(socketManager, ui, 8080, 5)
+  .
+
+rl [createdUISocket] :
+  createdSocket(ui, socketManager, Sock)
+  < ui : UI | Att >
+=>
+  < ui : UI | serverSocket: Sock, Att >
+  acceptClient(Sock, ui)
+  .
+
+rl [acceptedClient] :
+  acceptedClient(ui, Sock, "127.0.0.1", NewSock)
+  < ui : UI | Att >
+=>
+  < ui : UI | ibosSocket: NewSock >
+  send(NewSock, ui, "MSG-NEW-URL|url0|100.101.102.103#")
+  createClient(1234, "100.101.102.103")
+  .
+
+endm
+
 mod TEST is
 pr CONFIGURATION .
 pr SOCKS .
 pr CLIENT .
+pr UI .
+pr IBOS-EXTEND .
 
 vars S S' Delim Data Address Rest : String .
 vars N Port : Nat .
@@ -193,16 +236,18 @@ eq I(
 eq I({Config}) = true [owise] .
 --- End invariants
 
-op start : -> Configuration [ctor] .
+op startTest : -> Configuration [ctor] .
 
-rl [start] :
-  { start }
+rl [startTest] :
+  { startTest }
 =>
   {
     <>
-    createSocksServer(1234, "100.101.102.103")
-    createClient(1235, "100.101.102.103")
-    createClient(1236, "100.101.102.103")
+    startIBOS
+    createUI
+    ---createSocksServer(1234, "100.101.102.103")
+    ---createClient(1235, "100.101.102.103")
+
   }
   .
 
