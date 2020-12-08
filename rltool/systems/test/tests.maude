@@ -259,9 +259,8 @@ pr IBOS-EXTEND .
 vars S S' Delim Data Address Rest : String .
 vars N Port : Nat .
 vars Me : Oid .
-vars Att : AttributeSet .
+vars Att Att' : AttributeSet .
 
---- Invariants for testing
 op untilDelim : String String -> String .
 op afterDelim : String String -> String .
 
@@ -285,16 +284,29 @@ if
   . 
 
 var Config : Configuration .
+var L : String .
 
-op I : State -> Bool .
+--- Invariants for testing
+op ISOP : State -> Bool .
 
-eq I(
+eq ISOP(
   {
     < Me : Client | state: readingWebsiteMsg, address: Address, port: Port, read: S, Att >
     Config
-  }) = isBufferFullOf(S,  Address + ":" + string(Port, 10)) and I({Config}) .
+  }) = isBufferFullOf(S,  Address + ":" + string(Port, 10)) and ISOP({Config}) .
 
-eq I({Config}) = true [owise] .
+eq ISOP({Config}) = true [owise] .
+
+--- TODO: This needs to be expanded, right now its super specific to the one client case (and the recursion doesnt do anything)
+op IABC : State -> Bool .
+eq IABC(
+  {
+    < Me : Client | state: readingWebsiteMsg, address: Address, port: Port, read: S, Att >
+    < kernel | displayedTopBar(url("url0", L)), Att' >
+    Config
+  }) = L == Address and IABC({Config}) .
+
+eq IABC({Config}) = true [owise] .
 --- End invariants
 
 op startTest : -> Configuration [ctor] .
