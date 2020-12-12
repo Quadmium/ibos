@@ -218,6 +218,24 @@ rl [ready3] :
   < ui : UI | didIt: 3, Att >
   .
 
+***(
+rl [ready4] :
+  < Me : Client | state: readingWebsiteMsg, read: "100.101.102.104:80#", Att >
+  < ui : UI | ibosSocket: Sock, didIt: 3, Att' >
+=>
+  < ui : UI | ibosSocket: Sock, didIt: 4, Att' >
+  send(Sock, ui, "MSG-NEW-URL|100.101.102.105|100.101.102.105#")
+  .
+
+rl [ready5] :
+  < display | displayedContent(url("100.101.102.105", "100.101.102.105")), Att' > 
+  < ui : UI | didIt: 4, Att >
+=>
+  < display | displayedContent(url("100.101.102.105", "100.101.102.105")), Att' > 
+  createClient(8083, "100.101.102.105")
+  < ui : UI | didIt: 5, Att >
+  .
+)
 
 endm
 
