@@ -94,7 +94,7 @@ rl [sent] :
 rl [connectToServer] :
   < Me : Client | state: initial, address: Address, port: Port, Att >
 =>
-  createClientTcpSocket(socketManager, Me, "127.0.0.1", 8081)
+  createClientTcpSocket(socketManager, Me, "127.0.0.1", Port)
   < Me : Client | state: connecting, address: Address, port: Port, Att >
   .
 
@@ -126,7 +126,7 @@ if
 rl [sendRequest] :
   < Me : Client | state: sendingRequest, socketName: SocketName, address: Address, port: Port, Att >
 =>
-  send(SocketName, Me, char(5) + char(1) + char(0) + char(1) + addressToBytes(Address, 1) + portToBytes(Port))
+  send(SocketName, Me, char(5) + char(1) + char(0) + char(1) + addressToBytes(Address, 1) + portToBytes(80))
   < Me : Client | state: readingRequestReply, socketName: SocketName, address: Address, port: Port, Att >
   .
 
@@ -159,17 +159,17 @@ op ui : -> Oid .
 op serverSocket:_ : Oid -> Attribute [ctor] .
 op ibosSocket:_ : Oid -> Attribute [ctor] .
 
-op didIt:_ : Bool -> Attribute [ctor] .
+op didIt:_ : Nat -> Attribute [ctor] .
 
-vars Att : AttributeSet .
-vars Sock NewSock : Oid .
+vars Att Att' : AttributeSet .
+vars Sock NewSock Me : Oid .
 
 op createUI : -> Msg [ctor] .
 
 rl [createUI] : 
   createUI 
 => 
-  < ui : UI | didIt: false >
+  < ui : UI | didIt: 0 >
   createServerTcpSocket(socketManager, ui, 8080, 5)
   .
 
@@ -186,66 +186,44 @@ rl [acceptedClient] :
   < ui : UI | Att >
 =>
   < ui : UI | ibosSocket: NewSock, Att >
-  send(NewSock, ui, "MSG-NEW-URL|url0|100.101.102.103#")
+  send(NewSock, ui, "MSG-NEW-URL|100.101.102.103|100.101.102.103#")
   .
 
---- DEAR LORD FORGIVE ME
 --- how can we check IBOS is done processing before creating the client other than this?
 
 rl [ibosReady] :
-  < kernel | msgPolicy(policy(webapp,
-    network, MSG-FETCH-URL),ps policy(network, webapp, MSG-RETURN-URL),ps policy(ui,
-    webapp, MSG-NEW-URL),ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(2),
-    handledCurrently(none),weblabels(pi(webapp(0), url("0")),wp pi(webapp(1), url("url0",
-    "100.101.102.103"))),netlabels(pi(network(0), url("0"), url("0")),np pi(network(1),
-    url("url0", "100.101.102.103"), url("url0", "100.101.102.103"))),displayedTopBar(url(
-    "url0", "100.101.102.103")) > < display | activeWebapp(webapp(1)),displayedContent(url(
-    "url0", "100.101.102.103")) > < nic | in(mtLL),nic-out(mtLS) > < webappmgr | nextWPN(2)
-    > < ui | toKernel(mt) > < webapp(0) | rendered(url("0")),URL(url("0")),loading(true),
-    fromKernel(mt),toKernel(mt) > < webapp(1) | rendered(url("url0", "100.101.102.103")),
-    URL(url("url0", "100.101.102.103")),loading(true),fromKernel(mt),toKernel(mt) > <
-    network(0) | fromKernel(mt),toKernel(mt),returnTo(webapp(0)),in(mtLL),out(mtLL),mem-in(
-    nolabel),mem-out(nolabel) > < network(1) | fromKernel(mt),toKernel(mt),returnTo(webapp(
-    1)),in(mtLL),out(mtLL),mem-in(nolabel),mem-out(nolabel) > < socketManager :
-    SocketManager | nextNumber: 4,connections: (connectionFromTo(1, 2, ""),
-    connectionFromTo(2, 1, "")),localServers: (localServer(0, 8080),localServer(3, 8081)) >
-    < clientManager : ClientManager | nextNumber: 0 > < socketClient : SocketClient | read:
-    "",state: active,name: socket(1) > < stateTracker : StateTracker | lastNetlabels: pi(
-    network(1), url("url0", "100.101.102.103"), url("url0", "100.101.102.103")),
-    procAndPort: npap(pi(network(1), url("url0", "100.101.102.103"), url("url0",
-    "100.101.102.103")), 8081),nextPort: 8082 > <
-    socksServer(8081) : SocksServer | whitelistedAddress: "100.101.102.103",socketName:
-    socket(3),nextClientID: 0 >
+  < display | displayedContent(url("100.101.102.103", "100.101.102.103")), Att' > 
+  < ui : UI | didIt: 0, Att >
+  < kernel | netlabels(pi(network(0), url(
+    "100.101.102.103", "100.101.102.103"), url("100.101.102.103",
+    "100.101.102.103"))), (X:AttributeSet) >
+=>
+  < kernel | netlabels(pi(network(0), url(
+    "100.101.102.103", "100.101.102.103"), url("100.101.102.103",
+    "100.101.102.103"))), (X:AttributeSet) >
+  < display | displayedContent(url("100.101.102.103", "100.101.102.103")), Att' > 
 
-    < ui : UI | didIt: false, Att >
-  =>
-  < kernel | msgPolicy(policy(webapp,
-    network, MSG-FETCH-URL),ps policy(network, webapp, MSG-RETURN-URL),ps policy(ui,
-    webapp, MSG-NEW-URL),ps policy(ui, webapp, MSG-SWITCH-TAB)),nextNPN(2),
-    handledCurrently(none),weblabels(pi(webapp(0), url("0")),wp pi(webapp(1), url("url0",
-    "100.101.102.103"))),netlabels(pi(network(0), url("0"), url("0")),np pi(network(1),
-    url("url0", "100.101.102.103"), url("url0", "100.101.102.103"))),displayedTopBar(url(
-    "url0", "100.101.102.103")) > < display | activeWebapp(webapp(1)),displayedContent(url(
-    "url0", "100.101.102.103")) > < nic | in(mtLL),nic-out(mtLS) > < webappmgr | nextWPN(2)
-    > < ui | toKernel(mt) > < webapp(0) | rendered(url("0")),URL(url("0")),loading(true),
-    fromKernel(mt),toKernel(mt) > < webapp(1) | rendered(url("url0", "100.101.102.103")),
-    URL(url("url0", "100.101.102.103")),loading(true),fromKernel(mt),toKernel(mt) > <
-    network(0) | fromKernel(mt),toKernel(mt),returnTo(webapp(0)),in(mtLL),out(mtLL),mem-in(
-    nolabel),mem-out(nolabel) > < network(1) | fromKernel(mt),toKernel(mt),returnTo(webapp(
-    1)),in(mtLL),out(mtLL),mem-in(nolabel),mem-out(nolabel) > < socketManager :
-    SocketManager | nextNumber: 4,connections: (connectionFromTo(1, 2, ""),
-    connectionFromTo(2, 1, "")),localServers: (localServer(0, 8080),localServer(3, 8081)) >
-    < clientManager : ClientManager | nextNumber: 0 > < socketClient : SocketClient | read:
-    "",state: active,name: socket(1) > < stateTracker : StateTracker | lastNetlabels: pi(
-    network(1), url("url0", "100.101.102.103"), url("url0", "100.101.102.103")),
-    procAndPort: npap(pi(network(1), url("url0", "100.101.102.103"), url("url0",
-    "100.101.102.103")), 8081),nextPort: 8082 > < ui : UI | ibosSocket: socket(2) > <
-    socksServer(8081) : SocksServer | whitelistedAddress: "100.101.102.103",socketName:
-    socket(3),nextClientID: 0 >
+  createClient(8081, "100.101.102.103")
+  < ui : UI | didIt: 1, Att >
+  .
 
-    createClient(1234, "100.101.102.103")
-    < ui : UI | didIt: true, Att >
-    .
+rl [ready2] :
+  < Me : Client | state: readingWebsiteMsg, read: "100.101.102.103:80#", Att >
+  < ui : UI | ibosSocket: Sock, didIt: 1, Att' >
+=>
+  < ui : UI | ibosSocket: Sock, didIt: 2, Att' >
+  send(Sock, ui, "MSG-NEW-URL|100.101.102.104|100.101.102.104#")
+  .
+
+rl [ready3] :
+  < display | displayedContent(url("100.101.102.104", "100.101.102.104")), Att' > 
+  < ui : UI | didIt: 2, Att >
+=>
+  < display | displayedContent(url("100.101.102.104", "100.101.102.104")), Att' > 
+  createClient(8082, "100.101.102.104")
+  < ui : UI | didIt: 3, Att >
+  .
+
 
 endm
 
@@ -283,8 +261,8 @@ if
   length(S) > 0
   . 
 
-var Config : Configuration .
-var L : String .
+vars Config : Configuration .
+vars L L' : String .
 
 --- Invariants for testing
 op ISOP : State -> Bool .
@@ -293,18 +271,17 @@ eq ISOP(
   {
     < Me : Client | state: readingWebsiteMsg, address: Address, port: Port, read: S, Att >
     Config
-  }) = isBufferFullOf(S,  Address + ":" + string(Port, 10)) and ISOP({Config}) .
+  }) = isBufferFullOf(S,  Address + ":" + string(80, 10)) and ISOP({Config}) .
 
 eq ISOP({Config}) = true [owise] .
 
---- TODO: This needs to be expanded, right now its super specific to the one client case (and the recursion doesnt do anything)
 op IABC : State -> Bool .
 eq IABC(
   {
-    < Me : Client | state: readingWebsiteMsg, address: Address, port: Port, read: S, Att >
-    < kernel | displayedTopBar(url("url0", L)), Att' >
+    < Me : Client | address: Address, port: Port, read: S, Att >
+    < kernel | displayedTopBar(url(L, L')), Att' >
     Config
-  }) = L == Address and IABC({Config}) .
+  }) = L == L' and L == Address .
 
 eq IABC({Config}) = true [owise] .
 --- End invariants
@@ -318,8 +295,6 @@ rl [startTest] :
     <>
     startIBOS
     createUI
-    ---createSocksServer(1234, "100.101.102.103")
-    ---createClient(1235, "100.101.102.103")
 
   }
   .

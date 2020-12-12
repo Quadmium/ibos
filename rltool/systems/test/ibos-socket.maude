@@ -936,7 +936,7 @@ mod IBOS-EXTEND is
     createClientTcpSocket(socketManager, socketClient, "127.0.0.1", 8080)
     < stateTracker : StateTracker | lastNetlabels: mtNPIS, procAndPort: mtNPAP, nextPort: 8081 >
 
-    < ui | toKernel(msg(ui,webapp, MSG-NEW-URL, url("0")) @ mt) >
+    < ui | toKernel(mt) >
     < display | activeWebapp(none), displayedContent(about-blank) >
     < nic | in(mtLL), nic-out(mtLS) >
     < webappmgr | nextWPN(0) >

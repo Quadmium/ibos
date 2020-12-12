@@ -34,6 +34,7 @@ subsorts Connection < ConnectionSet .
 vars C : Connection .
 vars CS CS' : ConnectionSet .
 
+var Config : Configuration .
 vars SM Me Me' : Oid .
 vars Address S S' Buffer Buffer' Delim Data Rest : String .
 vars Port Backlog N N' SockNum : Nat .
@@ -127,7 +128,7 @@ rl [start2] :
   send(socket(2), me, "hi2")
   receive(socket(1), me)
   .
-)
+
 
 op untilDelim : String String -> String .
 op afterDelim : String String -> String .
@@ -151,8 +152,6 @@ if
   length(S) > 0
   . 
 
-var Config : Configuration .
-
 op I : Configuration -> Bool .
 
 eq I(
@@ -163,7 +162,7 @@ eq I(
   Config) = isBufferFullOf(S,  Address + ":" + string(Port, 10)) and I(Config) .
 
 eq I(Config) = true [owise] .
-
+)
 --- end debug
 
 --- Create the socket manager if not exist
