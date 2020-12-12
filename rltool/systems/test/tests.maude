@@ -194,13 +194,7 @@ rl [acceptedClient] :
 rl [ibosReady] :
   < display | displayedContent(url("100.101.102.103", "100.101.102.103")), Att' > 
   < ui : UI | didIt: 0, Att >
-  < kernel | netlabels(pi(network(0), url(
-    "100.101.102.103", "100.101.102.103"), url("100.101.102.103",
-    "100.101.102.103"))), (X:AttributeSet) >
 =>
-  < kernel | netlabels(pi(network(0), url(
-    "100.101.102.103", "100.101.102.103"), url("100.101.102.103",
-    "100.101.102.103"))), (X:AttributeSet) >
   < display | displayedContent(url("100.101.102.103", "100.101.102.103")), Att' > 
 
   createClient(8081, "100.101.102.103")
