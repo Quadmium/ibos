@@ -951,7 +951,7 @@ mod IBOS-EXTEND is
                   policy(network,webapp, MSG-RETURN-URL)) >
     .
 
-  op debug : String -> Msg [ctor msg] .
+  ---op debug : String -> Msg [ctor msg] .
 
   crl [newNetworkApp] :
     < stateTracker : StateTracker | lastNetlabels: NPIS, procAndPort: NPAP, nextPort: N, Att >

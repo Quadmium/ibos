@@ -156,9 +156,9 @@ mod SOCKS is
     < Me : SocksClient | socketName: SocketName, state: connected, Att >
   =>
     receive(SocketName, Me)
-    < Me : SocksClient | socketName: SocketName, state: readingRequest1, Att >
+    < Me : SocksClient | socketName: SocketName, state: waitingForHeader, Att >
     .
-***(
+  
   crl [receiveHeader1] :
     < Me : SocksClient | state: waitingForHeader, read: S, Att >
   =>
@@ -187,7 +187,7 @@ mod SOCKS is
     < Me : SocksClient | socketName: SocketName, state: readingRequest1, Att >
     send(SocketName, Me, char(5) + char(0))
   .
-)
+
   crl [readRequest1] :
     < Me : SocksClient | state: readingRequest1, read: S, Att >
   =>
@@ -240,20 +240,12 @@ mod SOCKS is
     .
 
   rl [checkWhitelist] :
-    < socksClient(N, Me) : SocksClient | state: checkingWhitelist, address: S', Att' >
-  =>
-    < socksClient(N, Me) : SocksClient | state: readingPort, address: S', Att' >
-    .
-
-***(
-  rl [checkWhitelist] :
     < Me : SocksServer | whitelistedAddress: S, Att >
     < socksClient(N, Me) : SocksClient | state: checkingWhitelist, address: S', Att' >
   =>
     < Me : SocksServer | whitelistedAddress: S, Att >
     < socksClient(N, Me) : SocksClient | state: (if S == S' then readingPort else shouldClose fi), address: S', Att' >
     .
-)
 
   crl [readPort] :
     < Me : SocksClient | state: readingPort, read: S, Att >

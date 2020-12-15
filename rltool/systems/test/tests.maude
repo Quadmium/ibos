@@ -11,7 +11,7 @@ vars Config : Configuration .
 vars Me CM SocketName : Oid .
 vars Att : AttributeSet .
 
-op createClient : Nat String -> Msg [ctor msg] .
+op createClient : Nat String Nat -> Msg [ctor msg] .
 
 op client : Nat -> Oid [ctor] .
 op Client : -> Cid [ctor] .
@@ -29,6 +29,7 @@ op address:_ : Nat -> Attribute [ctor] .
 op port:_ : Nat -> Attribute [ctor] .
 op socketName:_ : Oid -> Attribute [ctor] .
 op read:_ : String -> Attribute [ctor] .
+op forURL:_ : Nat -> Attribute [ctor] .
 
 op clientManagerInConfig : Configuration -> Bool .
 eq clientManagerInConfig(< CM : ClientManager | Att > Config) = true .
@@ -69,10 +70,10 @@ if
   .
 
 rl [createClient] :
-  createClient(Port, Address)
+  createClient(Port, Address, N')
   < CM : ClientManager | nextNumber: N, Att >
 =>
-  < client(N) : Client | state: initial, address: Address, port: Port, read: "" >
+  < client(N) : Client | state: initial, address: Address, port: Port, forURL: N', read: "" >
   < CM : ClientManager | nextNumber: s(N), Att >
   .
 
@@ -102,10 +103,10 @@ rl [connectedToServer] :
   < Me : Client | state: connecting, Att >
   createdSocket(Me, socketManager, SocketName)
 =>
-  < Me : Client | state: sendingRequest, socketName: SocketName, Att >
+  < Me : Client | state: sendingHeader, socketName: SocketName, Att >
   receive(SocketName, Me)
   .
-***(
+
 rl [sendHeader] :
   < Me : Client | state: sendingHeader, socketName: SocketName, Att >
 =>
@@ -121,7 +122,6 @@ if
   length(S) >= 2 /\
   Rest := substr(S, 2, length(S))
   .
-)
 
 rl [sendRequest] :
   < Me : Client | state: sendingRequest, socketName: SocketName, address: Address, port: Port, Att >
@@ -159,17 +159,38 @@ op ui : -> Oid .
 op serverSocket:_ : Oid -> Attribute [ctor] .
 op ibosSocket:_ : Oid -> Attribute [ctor] .
 
-op didIt:_ : Nat -> Attribute [ctor] .
+op nextURL:_ : Nat -> Attribute [ctor] .
+op canTakeAction:_ : Bool -> Attribute [ctor] .
+op startedClient:_ : Bool -> Attribute [ctor] .
+op currentURL:_ : Nat -> Attribute [ctor] .
+op curAction:_ : Msg -> Attribute [ctor] .
+op hasTab:_ : Nat -> Attribute [ctor] .
 
 vars Att Att' : AttributeSet .
 vars Sock NewSock Me : Oid .
+vars N N' N'' : Nat .
+vars S S' : String .
+vars M : Msg .
 
 op createUI : -> Msg [ctor] .
+
+op noAction : -> Msg [ctor] .
+op switchTabAction : -> Msg [ctor] .
+op newUrlAction : -> Msg [ctor] .
+
+op inspect : Nat -> Configuration .
+
+rl inspect(0) => createUI .
+crl inspect(N) => newUrlAction inspect(N - 1) if N > 0 .
+crl inspect(N) => switchTabAction inspect(N - 1) if N > 0 .
+
+op urlFromNat : Nat -> String .
+eq urlFromNat(N) = "0.0.0." + string(N, 10) .
 
 rl [createUI] : 
   createUI 
 => 
-  < ui : UI | didIt: 0 >
+  < ui : UI | canTakeAction: false, startedClient: false, currentURL: 0, nextURL: 1, curAction: noAction >
   createServerTcpSocket(socketManager, ui, 8080, 5)
   .
 
@@ -183,57 +204,67 @@ rl [createdUISocket] :
 
 rl [acceptedClient] :
   acceptedClient(ui, Sock, "127.0.0.1", NewSock)
-  < ui : UI | Att >
+  < ui : UI | canTakeAction: false, Att >
 =>
-  < ui : UI | ibosSocket: NewSock, Att >
-  send(NewSock, ui, "MSG-NEW-URL|100.101.102.103|100.101.102.103#")
+  < ui : UI | ibosSocket: NewSock, canTakeAction: true, Att >
   .
 
---- how can we check IBOS is done processing before creating the client other than this?
-
-rl [ibosReady] :
-  < display | displayedContent(url("100.101.102.103", "100.101.102.103")), Att' > 
-  < ui : UI | didIt: 0, Att >
+rl [newTabUI] :
+  < ui : UI | ibosSocket: Sock, canTakeAction: true, currentURL: N', nextURL: N, curAction: M, Att >
+  newUrlAction
 =>
-  < display | displayedContent(url("100.101.102.103", "100.101.102.103")), Att' > 
-
-  createClient(8081, "100.101.102.103")
-  < ui : UI | didIt: 1, Att >
+  < ui : UI | ibosSocket: Sock, canTakeAction: false, currentURL: N, nextURL: s(N), curAction: newUrlAction, hasTab: N, Att >
+  send(Sock, ui, "MSG-NEW-URL|" + urlFromNat(N) + "|" + urlFromNat(N) + "#")
   .
 
-rl [ready2] :
-  < Me : Client | state: readingWebsiteMsg, read: "100.101.102.103:80#", Att >
-  < ui : UI | ibosSocket: Sock, didIt: 1, Att' >
+crl [startClient] :
+  < ui : UI | canTakeAction: false, startedClient: false, currentURL: N, curAction: newUrlAction, Att >
+  < display | displayedContent(url(S, S)), Att' >
 =>
-  < ui : UI | ibosSocket: Sock, didIt: 2, Att' >
-  send(Sock, ui, "MSG-NEW-URL|100.101.102.104|100.101.102.104#")
+  createClient(8080 + N, urlFromNat(N), N)
+
+  < ui : UI | canTakeAction: false, startedClient: true, currentURL: N, curAction: newUrlAction, Att >
+  < display | displayedContent(url(S, S)), Att' >
+if
+  S == urlFromNat(N)
   .
 
-rl [ready3] :
-  < display | displayedContent(url("100.101.102.104", "100.101.102.104")), Att' > 
-  < ui : UI | didIt: 2, Att >
+crl [allowActionNewURL] :
+  < ui : UI | canTakeAction: false, startedClient: true, currentURL: N, curAction: newUrlAction, Att >
+  < Me : Client | forURL: N, state: readingWebsiteMsg, read: S, Att' >
 =>
-  < display | displayedContent(url("100.101.102.104", "100.101.102.104")), Att' > 
-  createClient(8082, "100.101.102.104")
-  < ui : UI | didIt: 3, Att >
+  < ui : UI | canTakeAction: true, startedClient: false, currentURL: N, curAction: noAction, Att >
+  < Me : Client | forURL: N, state: readingWebsiteMsg, read: S, Att' >
+if
+  S == urlFromNat(N) + ":80#"
+  .
+
+crl [switchTabUI] :
+  < ui : UI | ibosSocket: Sock, canTakeAction: true, currentURL: N', nextURL: N, curAction: M, hasTab: N'', Att >
+  switchTabAction
+=>
+  < ui : UI | ibosSocket: Sock, canTakeAction: false, currentURL: N'', nextURL: N, curAction: switchTabAction, Att >
+  send(Sock, ui, "MSG-SWITCH-TAB|" +  string(N'' - 1, 10) + "#")
+if
+  N'' =/= N'
+  .
+
+crl [allowActionSwitchTab] :
+  < ui : UI | canTakeAction: false, currentURL: N, curAction: switchTabAction, Att >
+  < display | displayedContent(url(S, S)), Att' >
+=>
+  < ui : UI | canTakeAction: true, currentURL: N, curAction: noAction, Att >
+  < display | displayedContent(url(S, S)), Att' >
+if
+  S == urlFromNat(N)
   .
 
 ***(
-rl [ready4] :
-  < Me : Client | state: readingWebsiteMsg, read: "100.101.102.104:80#", Att >
-  < ui : UI | ibosSocket: Sock, didIt: 3, Att' >
+--- Only fails with depth >= 4
+rl [havoc] :
+  < ui : UI | currentURL: (N:Nat), hasTab: (N1:Nat), hasTab: (N2:Nat), hasTab: (N3:Nat), hasTab: (N4:Nat), Att >
 =>
-  < ui : UI | ibosSocket: Sock, didIt: 4, Att' >
-  send(Sock, ui, "MSG-NEW-URL|100.101.102.105|100.101.102.105#")
-  .
-
-rl [ready5] :
-  < display | displayedContent(url("100.101.102.105", "100.101.102.105")), Att' > 
-  < ui : UI | didIt: 4, Att >
-=>
-  < display | displayedContent(url("100.101.102.105", "100.101.102.105")), Att' > 
-  createClient(8083, "100.101.102.105")
-  < ui : UI | didIt: 5, Att >
+  < ui : UI | currentURL: 1, hasTab: (N1:Nat), hasTab: (N2:Nat), hasTab: (N3:Nat), hasTab: (N4:Nat), Att >
   .
 )
 
@@ -249,7 +280,7 @@ pr IBOS-EXTEND .
 vars S S' Delim Data Address Rest : String .
 vars N Port : Nat .
 vars Me : Oid .
-vars Att Att' : AttributeSet .
+vars Att Att' Att'' : AttributeSet .
 
 op untilDelim : String String -> String .
 op afterDelim : String String -> String .
@@ -290,24 +321,24 @@ eq ISOP({Config}) = true [owise] .
 op IABC : State -> Bool .
 eq IABC(
   {
-    < Me : Client | address: Address, port: Port, read: S, Att >
-    < kernel | displayedTopBar(url(L, L')), Att' >
+    < ui : UI | currentURL: N, curAction: noAction, Att >
+    < Me : Client | address: Address, port: Port, forURL: N, read: S, Att' >
+    < kernel | displayedTopBar(url(L, L')), Att'' >
     Config
-  }) = L == L' and L == Address .
+  }) = (L == urlFromNat(N) and Address == urlFromNat(N)).
 
 eq IABC({Config}) = true [owise] .
 --- End invariants
 
-op startTest : -> Configuration [ctor] .
+op startTest : Nat -> Configuration [ctor] .
 
 rl [startTest] :
-  { startTest }
+  { startTest(N) }
 =>
   {
     <>
     startIBOS
-    createUI
-
+    inspect(N)
   }
   .
 

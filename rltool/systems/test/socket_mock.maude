@@ -244,7 +244,8 @@ rl [sendExternalSocket] :
     connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
     Att >
 =>
-  sent(Me, socket(N))
+  --- Sent receipts DISABLED to lower state space (all code just drops the sent msg, so it is blowing up our state space because we will try dropping it everywhere)
+  ---sent(Me, socket(N))
   < SM : SocketManager |
     connections: (externalConnectionFromTo(N, Address, Port, Buffer + Address + ":" + string(Port, 10) + "#"), CS), 
     Att >
@@ -271,7 +272,8 @@ rl [sendLocalSocket] :
     connections: (connectionFromTo(N, N', Buffer), CS), 
     Att >
 =>
-  sent(Me, socket(N))
+  --- Sent receipts DISABLED to lower state space (all code just drops the sent msg, so it is blowing up our state space because we will try dropping it everywhere)
+  ---sent(Me, socket(N))
   < SM : SocketManager |
     connections: (connectionFromTo(N, N', Buffer + S), CS), 
     Att >
