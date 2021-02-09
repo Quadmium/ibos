@@ -182,7 +182,7 @@ op inspect : Nat -> Configuration .
 
 rl [testfile] : inspect(0) => createUI .
 crl [testfile] : inspect(N) => newUrlAction inspect(N - 1) if N > 0 .
-crl [testfile]: inspect(N) => switchTabAction inspect(N - 1) if N > 0 .
+***crl [testfile]: inspect(N) => switchTabAction inspect(N - 1) if N > 0 .
 
 op urlFromNat : Nat -> String .
 eq urlFromNat(N) = "0.0.0." + string(N, 10) .
@@ -193,6 +193,8 @@ rl [testfile] :
   < ui : UI | canTakeAction: false, startedClient: false, currentURL: 0, nextURL: 1, curAction: noAction >
   createServerTcpSocket(socketManager, ui, 8080, 5)
   .
+
+op debug : String -> Msg [ctor msg] .
 
 rl [testfile] :
   createdSocket(ui, socketManager, Sock)
@@ -215,6 +217,7 @@ rl [testfile] :
 =>
   < ui : UI | ibosSocket: Sock, canTakeAction: false, currentURL: N, nextURL: s(N), curAction: newUrlAction, hasTab: N, Att >
   send(Sock, ui, "MSG-NEW-URL|" + urlFromNat(N) + "|" + urlFromNat(N) + "#")
+  debug("sent")
   .
 
 crl [testfile] :
@@ -259,14 +262,15 @@ if
   S == urlFromNat(N)
   .
 
-***(
+
 --- Only fails with depth >= 4
-rl [testfile] :
+crl [havoc] :
   < ui : UI | currentURL: (N:Nat), hasTab: (N1:Nat), hasTab: (N2:Nat), hasTab: (N3:Nat), hasTab: (N4:Nat), Att >
 =>
   < ui : UI | currentURL: 1, hasTab: (N1:Nat), hasTab: (N2:Nat), hasTab: (N3:Nat), hasTab: (N4:Nat), Att >
+if
+  N > 1
   .
-)
 
 endm
 
@@ -322,10 +326,9 @@ op IABC : State -> Bool .
 eq IABC(
   {
     < ui : UI | currentURL: N, curAction: noAction, Att >
-    < Me : Client | address: Address, port: Port, forURL: N, read: S, Att' >
     < kernel | displayedTopBar(url(L, L')), Att'' >
     Config
-  }) = (L == urlFromNat(N) and Address == urlFromNat(N)).
+  }) = (L == urlFromNat(N)).
 
 eq IABC({Config}) = true [owise] .
 --- End invariants

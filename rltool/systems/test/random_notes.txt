@@ -152,3 +152,54 @@ crl [socketfile] :
 if
   not socketManagerInConfig(Config)
   .
+
+
+
+Bug we found
+**** no policy allowed this, therefore implicitly disallowed and dropped
+rl [ibosfile] :
+   { < kernel | handledCurrently(none), msgPolicy(MP),  Att  >
+     < PPI1   | toKernel(msg(ORG, GPPI, MT, L) @ ML),   Att2 > Cnf }
+=>
+   { < kernel | handledCurrently(none), msgPolicy(MP), Att  >
+     < PPI1   | toKernel(ML),                          Att2 > Cnf } .
+
+
+srew {startTest(2)} using ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!)* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) ; match (X:State) s.t. not IABC(X:State) .
+search {startTest(8)} =>* (X:State) s.t. not IABC(X:State) using ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!)* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) .
+search {startTest(8)} =>* (X:State) s.t. not IABC(X:State) .
+
+Debug(2)> search {startTest(8)} =>* (X:State) s.t. not IABC(X:State) .
+search in TEST : {startTest(8)} =>* X:State such that not IABC(X:State) = true .
+
+No solution.
+states: 19733  rewrites: 1932738 in 7268ms cpu (7306ms real) (265924 rewrites/second)
+Debug(2)> search {startTest(8)} =>* (X:State) s.t. not IABC(X:State) using ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!)* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) .
+search in TEST : {startTest(8)} =>* X:State such that not IABC(X:State) = true using (testfile ! ; socksfile ! ; socketfile ! ; ibosfile !)* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) .
+
+
+No solution.
+states: 12570  rewrites: 691335 in 3636ms cpu (3633ms real) (190136 rewrites/second)
+Debug(2)> 
+
+
+
+
+
+
+
+CRASH:
+Maude internal error.
+Please submit a bug report to: maude-bugs@lists.cs.illinois.edu
+Please include the platform details, Maude version, and a file
+`crash.maude' that can be loaded to reproduce the crash (it may load
+other files). Do not bother trying to simplify your example unless the
+runtime to the bug being visible is greater than 10 seconds.
+
+search {startTest(5)} =>* (X:State) s.t. not IABC(X:State) using ((havoc) | ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!))* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) .
+
+
+
+- Figure out why havoc! doesnt work in above command depth 4
+
+- Try to split test rules into two

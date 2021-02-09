@@ -668,6 +668,8 @@ mod KERNEL is
            Cnf }
   if np-by-lbl?(L',NPIS) = false .
 
+  op debug : Nat -> Msg [ctor msg] .
+
   **** mirrored, for the reverse direction from network process to webapp:
   **** there is a connection, just forward the message
   **** network proc answering to webapp, thus having the correct recipient:
@@ -731,12 +733,12 @@ mod KERNEL is
        Cnf } .
 
   **** no policy allowed this, therefore implicitly disallowed and dropped
-  rl [ibosfile] :
-     { < kernel | handledCurrently(none), msgPolicy(MP),  Att  >
-       < PPI1   | toKernel(msg(ORG, GPPI, MT, L) @ ML),   Att2 > Cnf }
-  =>
-     { < kernel | handledCurrently(none), msgPolicy(MP), Att  >
-       < PPI1   | toKernel(ML),                          Att2 > Cnf } .
+  **** rl [ibosfile] :
+  ****    { < kernel | handledCurrently(none), msgPolicy(MP),  Att  >
+  ****      < PPI1   | toKernel(msg(ORG, GPPI, MT, L) @ ML),   Att2 > Cnf }
+  **** =>
+  ****    { < kernel | handledCurrently(none), msgPolicy(MP), Att  >
+  ****      < PPI1   | toKernel(ML),                          Att2 > Cnf } .
 
   **** Made into a topmost rule from module KERNEL-POLICIES
   crl [ibosfile] :
@@ -799,7 +801,9 @@ mod KERNEL is
            Att2 >
        < webappmgr | nextWPN(N), Att3 > Cnf }
   =>
-     { < kernel    |
+     { 
+       debug(1)
+       < kernel    |
            handledCurrently(none),
            displayedTopBar(URL),
            weblabels(pi(webapp(N), URL),wp WPIS),
@@ -951,7 +955,7 @@ mod IBOS-EXTEND is
                   policy(network,webapp, MSG-RETURN-URL)) >
     .
 
-  ---op debug : String -> Msg [ctor msg] .
+  op debug : String -> Msg [ctor msg] .
 
   crl [ibosfile] :
     < stateTracker : StateTracker | lastNetlabels: NPIS, procAndPort: NPAP, nextPort: N, Att >
@@ -983,6 +987,7 @@ mod IBOS-EXTEND is
   =>
     < socketClient : SocketClient | state: active, name: TS, read: Rest >
     < ui | toKernel(ML @ msg(ui,webapp, MSG-NEW-URL, url(S'', S'''))) >
+    debug("received")
   if 
     Data := untilDelim(S, "#") /\
     Rest := afterDelim(S, "#") /\
