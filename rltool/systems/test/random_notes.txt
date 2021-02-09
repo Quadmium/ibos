@@ -1,0 +1,154 @@
+srew {startTest(2)} using (acceptedClient | allowActionNewURL | allowActionSwitchTab | change-display | checkWhitelist | closedSocket | closedSocketDuringTunnel | closedSocketDuringTunnelFinish | closeExternalSocket | closeLocalSocket | connectedToServer | connectToServer | createClient | createClientManager | createClientTcpSocketMsgExternalClient | createClientTcpSocketMsgLocalClient | createdSocket | createdUISocket | createServerTcpSocketMsg | createSocketManager | createSocksServer | createUI | fetch | finishedReadingHeader | kernelForwardsOPMessage | kernelReceivesOPMessage-pa1 | kernelReceivesOPMessage-pa10 | kernelReceivesOPMessage-pa2 | kernelReceivesOPMessage-pa3 | kernelReceivesOPMessage-pa4 | kernelReceivesOPMessage-pa5 | kernelReceivesOPMessage-pa6-a | kernelReceivesOPMessage-pa6-b | kernelReceivesOPMessage-pa7 | kernelReceivesOPMessage-pa8 | kernelReceivesOPMessage-pa9 | mem-in | mem-out | msg-to-kernel | newNetworkApp | newTabUI | new-url | nic1 | openTunnel | openTunnelFailure | openTunnelSuccess | proc-in | proc-out | readMethod | readPort | readRequest1 | readRequest2 | readRequestIPV4 | readRequestReply | readRequestSTR | receive | received | receivedFetchState | receivedNewURL | receivedSwitchTab | receiveExternalSocket | receiveHeader1 | receiveHeaderMethods | receiveLocalSocket | receiveLocalSocketNotExist | render | request-from-webapp | sendExternalSocket | sendHeader | sendLocalSocket | sendLocalSocketNotExist | sendRequest | sendWebsiteMsg | sent | shouldClose | startClient | startIBOS | startTest | switchTabUI | tab-change | tunnelClosed | tunnelingAckSend | tunnelingRecv | tunnelingSend | waitForGreeting | createdSocket2 | acceptedClient2 | receive2 | sent2 | a | b | c)* .
+
+srew {startTest(2)} using (all)* .
+
+
+First phase might be to do what we did in previous semester in a nicer / more complete way using strategy language. Have previous thing as a benchmark. Once done, can think about how to enrich in different directions. Theme could be low hanging fruit / big bang for buck. Something not too complicated and we could see something interesting with it. Browser security / crypto security / DOS security. Any of those could be interesting. Browser with stronger security properties than SOP. Many things possible. Figure out something we can break down.
+
+Some secure communication between client / server or other scenarios. Imagine a DOS. Crypto costly to compute, so DOS can be more crippling. In this case a defense could buy a lot more than in a normal scenario. Simple checks are easy like cookie or something. The more computation the server has to do before knowing if it rejects or not the request the more damage the DOS can do to that server. Number of techniques exist to make sure we are an honest participant. Can force extra work or something else. A probabilistic technique made earlier. Crowded room need to talk to someone what to do? Shout at them. Timeout as a client where we expect to get an answer by some time. If haven't received send 2 messages, else send 4, ... exponentially. Fighting fire with fire, so what is server doing? Server can measure how busy it is, and as it gets busier it throws out without looking more and more requests probabilistically. More rejects when more junk exists. Will slow down communication but with high probability the honest clients will be heard. As attack gets bigger have to shout higher and takes longer for server to get request. Can also provision more servers. When the servers get certian level of business provision a new one (they are already throwing stuff out), do it in combination with this defense mechanism. Combination of these two can achieve stable availability. Communication is only slowed down by a constant factor, depending on when we decide to provision a new server. Good guys can still communicate, slowdown is a tradeoff.
+
+Formal patterns are generic solutions to a problem that can be reused in many different settings, and come with some properties. Protocol and DOS protection are formal patterns. Client sends request to server and expects answer back. Some wrapper encrypts message and sends to wrapper around server to decrypt and pass to server. A modular way to insert the encryption in between a protocol. Instead of a monolithic system have a modular system. "Taming..." paper. Similar to breaking things down to services.
+
+
+Figuring out how to write search as srew:
+search start =>* X:State s.t. not I(X:State) .
+
+could help:
+srew (0)[nil] (1)[nil] (2)[3 2 1] using match (N)[3 2 1] H s.t. N =/= 0 .
+
+try with toy example and make sure we get same number of states and results
+not only commands it reaches but those that also pass this test
+
+- Pair of state and continuation
+- In the complicated case the continuation is also more complicated
+- Search is keeping show graph thing too
+- Computation involves computing the next state but also the continuation of the strategy
+- Reaches same things but doing more work less work to do so
+- Could try using the show command for a simpler example
+- Pair of state and continuation strategy
+- If we run into tricky questions can ask
+
+- Only when we are considering all the rules that can use the all command, there is a trick we might consider:
+  - Can give the same label to similar rules
+  - Can have a much smaller
+  - Labels can be repeated
+  - Same label to all rules in one set of rules
+  - Should save rewrites
+  - Downside is will need to change labels a lot
+  - Should see same states reached, but simpler computation on the strategy side
+
+- Check timing between this version and the model checking we did last sem
+- Model check with srew only as opposed to the search command for the equivalent command we would give, is there a difference in performance. May see lower performance for the search command. Stores whole graph for search but not for srew. Could have a simpler search that doesn't store continuations too. If search with strategy seems to be not efficient that would be good to know.
+
+
+
+==========================ibos-socket.maude==================================
+
+(fetch | render | request-from-webapp | proc-in | proc-out | nic1 | msg-to-kernel | mem-out | mem-in | kernelReceivesOPMessage-pa1 | kernelReceivesOPMessage-pa2 | kernelReceivesOPMessage-pa3 | kernelReceivesOPMessage-pa4 | kernelReceivesOPMessage-pa5 | kernelReceivesOPMessage-pa6-a | kernelReceivesOPMessage-pa6-b | kernelReceivesOPMessage-pa7 | kernelReceivesOPMessage-pa8 | kernelReceivesOPMessage-pa9 | kernelReceivesOPMessage-pa10 | kernelForwardsOPMessage | tab-change | change-display | new-url | startIBOS | newNetworkApp | createdSocket2 | receivedNewURL | receivedSwitchTab | receivedFetchState | received | sent3)
+
+==========================socket_mock.maude==================================
+
+(createSocketManager | createClientTcpSocketMsgLocalClient | createClientTcpSocketMsgExternalClient | createServerTcpSocketMsg | sendExternalSocket | receiveExternalSocket | sendLocalSocket | receiveLocalSocket | closeExternalSocket | closeLocalSocket | sendLocalSocketNotExist | receiveLocalSocketNotExist)
+
+==========================socks.maude==================================
+
+(createSocksServer | receive2 | sent2 | closedSocket | closedSocketDuringTunnel | closedSocketDuringTunnelFinish | shouldClose | createdSocket | acceptedClient2 | waitForGreeting | receiveHeader1 | receiveHeaderMethods | finishedReadingHeader | readRequest1 | readRequest2 | readRequestIPV4 | readRequestSTR | checkWhitelist | readPort | openTunnel | openTunnelFailure | openTunnelSuccess | tunnelingAckSend | tunnelingRecv | tunnelingSend | tunnelClosed)
+
+==========================tests.maude==================================
+
+(createClientManager | createClient | receive | sent | connectToServer | connectedToServer | sendHeader | readMethod | sendRequest | readRequestReply | sendWebsiteMsg | a | b | c | createUI | createdUISocket | acceptedClient | newTabUI | startClient | allowActionNewURL | switchTabUI | allowActionSwitchTab | startTest)
+
+
+(A! ; B! ; C! ; D!)*
+
+(A! | B! | C! | D!)*
+
+Solution 149
+rewrites: 8977 
+Solution 149
+
+Solution 149
+rewrites: 8977 in 96ms cpu
+
+
+9039 in 96ms
+rewrites: 9039 in 356ms cpu
+
+
+srew {startTest(2)} using ((testfile)! | (socksfile)! | (socketfile)! | (ibosfile)!)* .
+
+srew {startTest(2)} using ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!)* .
+
+
+
+rewrites: 8977
+
+srew {startTest(2)} using ((fetch | render | request-from-webapp | proc-in | proc-out | nic1 | msg-to-kernel | mem-out | mem-in | kernelReceivesOPMessage-pa1 | kernelReceivesOPMessage-pa2 | kernelReceivesOPMessage-pa3 | kernelReceivesOPMessage-pa4 | kernelReceivesOPMessage-pa5 | kernelReceivesOPMessage-pa6-a | kernelReceivesOPMessage-pa6-b | kernelReceivesOPMessage-pa7 | kernelReceivesOPMessage-pa8 | kernelReceivesOPMessage-pa9 | kernelReceivesOPMessage-pa10 | kernelForwardsOPMessage | tab-change | change-display | new-url | startIBOS | newNetworkApp | createdSocket2 | receivedNewURL | receivedSwitchTab | receivedFetchState | received | sent3)! | (createSocketManager | createClientTcpSocketMsgLocalClient | createClientTcpSocketMsgExternalClient | createServerTcpSocketMsg | sendExternalSocket | receiveExternalSocket | sendLocalSocket | receiveLocalSocket | closeExternalSocket | closeLocalSocket | sendLocalSocketNotExist | receiveLocalSocketNotExist)! | (socksfile)! | (createClientManager | createClient | receive | sent | connectToServer | connectedToServer | sendHeader | readMethod | sendRequest | readRequestReply | sendWebsiteMsg | a | b | c | createUI | createdUISocket | acceptedClient | newTabUI | startClient | allowActionNewURL | switchTabUI | allowActionSwitchTab | startTest)!)* .
+
+srew {startTest(2)} using ((fetch | render | request-from-webapp | proc-in | proc-out | nic1 | msg-to-kernel | mem-out | mem-in | kernelReceivesOPMessage-pa1 | kernelReceivesOPMessage-pa2 | kernelReceivesOPMessage-pa3 | kernelReceivesOPMessage-pa4 | kernelReceivesOPMessage-pa5 | kernelReceivesOPMessage-pa6-a | kernelReceivesOPMessage-pa6-b | kernelReceivesOPMessage-pa7 | kernelReceivesOPMessage-pa8 | kernelReceivesOPMessage-pa9 | kernelReceivesOPMessage-pa10 | kernelForwardsOPMessage | tab-change | change-display | new-url | startIBOS | newNetworkApp | createdSocket2 | receivedNewURL | receivedSwitchTab | receivedFetchState | received | sent3)! ; idle | (createSocketManager | createClientTcpSocketMsgLocalClient | createClientTcpSocketMsgExternalClient | createServerTcpSocketMsg | sendExternalSocket | receiveExternalSocket | sendLocalSocket | receiveLocalSocket | closeExternalSocket | closeLocalSocket | sendLocalSocketNotExist | receiveLocalSocketNotExist)! ; idle | (createSocksServer | receive2 | sent2 | closedSocket | closedSocketDuringTunnel | closedSocketDuringTunnelFinish | shouldClose | createdSocket | acceptedClient2 | waitForGreeting | receiveHeader1 | receiveHeaderMethods | finishedReadingHeader | readRequest1 | readRequest2 | readRequestIPV4 | readRequestSTR | checkWhitelist | readPort | openTunnel | openTunnelFailure | openTunnelSuccess | tunnelingAckSend | tunnelingRecv | tunnelingSend | tunnelClosed)! ; idle | (createClientManager | createClient | receive | sent | connectToServer | connectedToServer | sendHeader | readMethod | sendRequest | readRequestReply | sendWebsiteMsg | a | b | c | createUI | createdUISocket | acceptedClient | newTabUI | startClient | allowActionNewURL | switchTabUI | allowActionSwitchTab | startTest)!)* .
+
+
+
+srew {startTest(2)} using ((createClientManager | createClient | receive | sent | connectToServer | connectedToServer | sendHeader | readMethod | sendRequest | readRequestReply | sendWebsiteMsg | a | b | c | createUI | createdUISocket | acceptedClient | newTabUI | startClient | allowActionNewURL | switchTabUI | allowActionSwitchTab | startTest)! ; (fetch | render | request-from-webapp | proc-in | proc-out | nic1 | msg-to-kernel | mem-out | mem-in | kernelReceivesOPMessage-pa1 | kernelReceivesOPMessage-pa2 | kernelReceivesOPMessage-pa3 | kernelReceivesOPMessage-pa4 | kernelReceivesOPMessage-pa5 | kernelReceivesOPMessage-pa6-a | kernelReceivesOPMessage-pa6-b | kernelReceivesOPMessage-pa7 | kernelReceivesOPMessage-pa8 | kernelReceivesOPMessage-pa9 | kernelReceivesOPMessage-pa10 | kernelForwardsOPMessage | tab-change | change-display | new-url | startIBOS | newNetworkApp | createdSocket2 | receivedNewURL | receivedSwitchTab | receivedFetchState | received | sent3)! ; (createSocketManager | createClientTcpSocketMsgLocalClient | createClientTcpSocketMsgExternalClient | createServerTcpSocketMsg | sendExternalSocket | receiveExternalSocket | sendLocalSocket | receiveLocalSocket | closeExternalSocket | closeLocalSocket | sendLocalSocketNotExist | receiveLocalSocketNotExist)! ; (createSocksServer | receive2 | sent2 | closedSocket | closedSocketDuringTunnel | closedSocketDuringTunnelFinish | shouldClose | createdSocket | acceptedClient2 | waitForGreeting | receiveHeader1 | receiveHeaderMethods | finishedReadingHeader | readRequest1 | readRequest2 | readRequestIPV4 | readRequestSTR | checkWhitelist | readPort | openTunnel | openTunnelFailure | openTunnelSuccess | tunnelingAckSend | tunnelingRecv | tunnelingSend | tunnelClosed)!)* .
+
+
+TODO:
+- Figure out why changing order from ABCD to DABC made the example continue
+      -> Not sure yet
+- May have to do with the bang operator going to the end of the process, order could matter here
+- How does it compare to what we did can we find the same bugs using this?
+- Interesting if this is doing same thing as tweaked model checking version, check frontier of states in one case and the other or if its not the same
+- Build intuition on strategy language specs
+
+
+
+
+
+
+((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!)!
+(to termination any file)!
+
+A! => (A)* ; not(A)
+A!! => A!* ; not(A!)
+not(A!) => not((A)* ; not(A)) => not(not(A)) => A
+
+A!! => A!* ; A => (A* ; not(A))* ; A
+
+
+
+A! => A* ; not(A)
+A!! => (A!)* ; not(A!)
+
+
+run (to termination any file) until not(to termination any file)
+
+
+
+srew {startTest(2)} using ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!)* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) .
+
+
+
+Bug we found
+
+rl [testfile] :
+  { startTest(N) }
+=>
+  {
+    <>
+    startIBOS
+    inspect(N)
+  }
+  .
+
+crl [socketfile] :
+  { Config }
+=>
+  { < socketManager : SocketManager | 
+    nextNumber: 0, 
+    connections: mtCS,
+    localServers: mtLSS >
+    Config
+  }
+if
+  not socketManagerInConfig(Config)
+  .
