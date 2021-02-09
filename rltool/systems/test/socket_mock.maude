@@ -98,7 +98,7 @@ eq socketManagerInConfig(Config) = false [owise] .
 
 --- search start =>* X:Configuration s.t. not I(X:Configuration) .
 ***(
-rl [start] :
+rl [socketfile] :
   start
 =>
   < socketManager : SocketManager | 
@@ -120,7 +120,7 @@ rl [start] :
   createClientTcpSocket(socketManager, me', "127.0.0.1", 25123)
   .
 
-rl [start2] :
+rl [socketfile] :
   acceptedClient(me, socket(0), "127.0.0.1", socket(2))
 =>
   send(socket(1), me', "hi1")
@@ -171,14 +171,14 @@ eq I(Config) = true [owise] .
 --- match any sub-config without the socket manager and apply the rule.
 --- This allows us to check something on the global state, but means we have to start our 
 --- program using rew {start} . instead of rew start .
-crl [createSocketManager] :
-  { Config }
+crl [socketfile] :
+  { <> Config }
 =>
   { < socketManager : SocketManager | 
     nextNumber: 0, 
     connections: mtCS,
     localServers: mtLSS >
-    Config
+    <> Config
   }
 if
   not socketManagerInConfig(Config)
@@ -186,7 +186,7 @@ if
 
 --- Socket creation rules
 
-crl [createClientTcpSocketMsgLocalClient] :
+crl [socketfile] :
   < SM : SocketManager | 
     nextNumber: N, 
     connections: CS, 
@@ -206,7 +206,7 @@ if
   isLocal(Address)
   .
 
-crl [createClientTcpSocketMsgExternalClient] :
+crl [socketfile] :
   < SM : SocketManager | 
     nextNumber: N, 
     connections: CS, 
@@ -222,7 +222,7 @@ if
   not isLocal(Address)
   .
 
-rl [createServerTcpSocketMsg] :
+rl [socketfile] :
   < SM : SocketManager | 
     nextNumber: N, 
     localServers: LSS,
@@ -238,7 +238,7 @@ rl [createServerTcpSocketMsg] :
 
 --- External client reply rules
 
-rl [sendExternalSocket] :
+rl [socketfile] :
   send(socket(N), Me, S)
   < SM : SocketManager |
     connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
@@ -251,7 +251,7 @@ rl [sendExternalSocket] :
     Att >
   .
 
-crl [receiveExternalSocket] :
+crl [socketfile] :
   receive(socket(N), Me)
   < SM : SocketManager |
     connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
@@ -266,7 +266,7 @@ if
   .
 
 --- Local sockets send and receive
-rl [sendLocalSocket] :
+rl [socketfile] :
   send(socket(N), Me, S)
   < SM : SocketManager |
     connections: (connectionFromTo(N, N', Buffer), CS), 
@@ -279,7 +279,7 @@ rl [sendLocalSocket] :
     Att >
   .
 
-crl [receiveLocalSocket] :
+crl [socketfile] :
   receive(socket(N'), Me)
   < SM : SocketManager |
     connections: (connectionFromTo(N, N', Buffer), CS), 
@@ -294,7 +294,7 @@ if
   .
 
 --- Close socket
-rl [closeExternalSocket] : 
+rl [socketfile] : 
   closeSocket(socket(N), Me)
   < SM : SocketManager |
     connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
@@ -306,7 +306,7 @@ rl [closeExternalSocket] :
   closedSocket(Me, socket(N), "")
   .
 
-rl [closeLocalSocket] : 
+rl [socketfile] : 
   closeSocket(socket(N), Me)
   < SM : SocketManager |
     connections: (connectionFromTo(N, N', Buffer), connectionFromTo(N', N, Buffer'), CS), 
@@ -323,7 +323,7 @@ rl [closeLocalSocket] :
 --- TODO: some of the behavior on socks.maude handles the website closing once reply is done, what do we want to do? Close immediately after sending a reply?
 --- (while local either party can close the socket)
 
-crl [sendLocalSocketNotExist] :
+crl [socketfile] :
   send(socket(N), Me, S)
   < SM : SocketManager |
     connections: CS, 
@@ -337,7 +337,7 @@ if
   not containsConnectionWith(N, CS)
   .
 
-crl [receiveLocalSocketNotExist] :
+crl [socketfile] :
   receive(socket(N), Me)
   < SM : SocketManager |
     connections: CS, 

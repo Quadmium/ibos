@@ -2,7 +2,7 @@ load socket_mock.maude
 
 ***(
 op start : -> Configuration .
-rl [start] :
+rl [socksfile] :
   start
 =>
   <>
@@ -78,7 +78,7 @@ mod SOCKS is
   op portToBytes : Nat -> String .
   eq portToBytes(N) = char(N quo (2 ^ 8)) + char(N rem (2 ^ 8)) .
 
-  rl [createSocksServer] :
+  rl [socksfile] :
     createSocksServer(N, S)
   =>
     < socksServer(N) : SocksServer | whitelistedAddress: S >
@@ -86,7 +86,7 @@ mod SOCKS is
     createServerTcpSocket(socketManager, socksServer(N), N, 5)
     .
 
-  rl [receive2] :
+  rl [socksfile] :
     < Me : SocksClient | socketName: SocketName, read: S, Att >
     received(Me, SocketName, S')
   =>
@@ -94,14 +94,14 @@ mod SOCKS is
     receive(SocketName, Me)
     .
 
-  rl [sent2] :
+  rl [socksfile] :
     < Me : SocksClient | socketName: SocketName, Att >
     sent(Me, SocketName)
   =>
     < Me : SocksClient | socketName: SocketName, Att >
     .
 
-  crl [closedSocket] :
+  crl [socksfile] :
     <>
     < Me : SocksClient | state: STATE, socketName: SocketName, Att >
     closedSocket(Me, SocketName, S)
@@ -112,7 +112,7 @@ mod SOCKS is
     .
   
   --- Clean up the tunnel socket if we lose main socket unexpectedly
-  rl [closedSocketDuringTunnel] :
+  rl [socksfile] :
     < Me : SocksClient | state: tunneling, socketName: SocketName, tunnelSocketName: NewSocketName, Att >
     closedSocket(Me, SocketName, S)
   => 
@@ -120,7 +120,7 @@ mod SOCKS is
     closeSocket(NewSocketName, Me)
     .
 
-  rl [closedSocketDuringTunnelFinish] : 
+  rl [socksfile] : 
     <>
     < Me : SocksClient | state: tunnelingDisconnected, tunnelSocketName: NewSocketName, Att >
     closedSocket(Me, NewSocketName, S)
@@ -128,14 +128,14 @@ mod SOCKS is
     <>
     .
 
-  rl [shouldClose] : 
+  rl [socksfile] : 
     < Me : SocksClient | socketName: SocketName, state: shouldClose, Att >
   =>
     < Me : SocksClient | socketName: SocketName, state: closed, Att >
     closeSocket(SocketName, Me)
     .
 
-  rl [createdSocket] :
+  rl [socksfile] :
     < Me : SocksServer | Att >
     createdSocket(Me, socketManager, SocketName)
   =>
@@ -143,7 +143,7 @@ mod SOCKS is
     acceptClient(SocketName, Me)
     .
 
-  rl [acceptedClient2] :
+  rl [socksfile] :
     < Me : SocksServer | socketName: SocketName, nextClientID: N, Att >
     acceptedClient(Me, SocketName, Address, NewSocketName)
   =>
@@ -152,14 +152,14 @@ mod SOCKS is
     < socksClient(N, Me) : SocksClient | socketName: NewSocketName, state: connected, read: "" >
     .
 
-  rl [waitForGreeting] : 
+  rl [socksfile] : 
     < Me : SocksClient | socketName: SocketName, state: connected, Att >
   =>
     receive(SocketName, Me)
     < Me : SocksClient | socketName: SocketName, state: waitingForHeader, Att >
     .
   
-  crl [receiveHeader1] :
+  crl [socksfile] :
     < Me : SocksClient | state: waitingForHeader, read: S, Att >
   =>
     < Me : SocksClient | state: readingMethods(N), read: Rest, Att >
@@ -170,7 +170,7 @@ mod SOCKS is
     N := ascii(substr(Data, 1, 1))
     .
   
-  crl [receiveHeaderMethods] :
+  crl [socksfile] :
     < Me : SocksClient | state: readingMethods(I), read: S, Att >
   =>
     < Me : SocksClient | state: readingMethods(I - I'), read: Rest, Att >
@@ -181,14 +181,14 @@ mod SOCKS is
     Rest := substr(S, I', length(S))
     .
 
-  rl [finishedReadingHeader] :
+  rl [socksfile] :
     < Me : SocksClient | socketName: SocketName, state: readingMethods(0), Att >
   =>
     < Me : SocksClient | socketName: SocketName, state: readingRequest1, Att >
     send(SocketName, Me, char(5) + char(0))
   .
 
-  crl [readRequest1] :
+  crl [socksfile] :
     < Me : SocksClient | state: readingRequest1, read: S, Att >
   =>
     < Me : SocksClient | state: (if N == 1 then readingRequest2 else shouldClose fi), read: Rest, Att >
@@ -199,7 +199,7 @@ mod SOCKS is
     N := ascii(substr(Data, 1, 1))
     .
 
-  crl [readRequest2] :
+  crl [socksfile] :
     < Me : SocksClient | state: readingRequest2, read: S, Att >
   =>
     < Me : SocksClient | 
@@ -212,7 +212,7 @@ mod SOCKS is
     N := ascii(substr(Data, 1, 1))
     .
 
-  crl [readRequestIPV4] :
+  crl [socksfile] :
     < Me : SocksClient | state: readingRequestIPV4, read: S, Att >
   =>
     < Me : SocksClient | state: checkingWhitelist, read: Rest, addressType: 1, address: S', Att >
@@ -227,7 +227,7 @@ mod SOCKS is
     S' := string(N, 10) + "." + string(N', 10) + "." + string(N'', 10) + "." + string(N''', 10)
     .
   
-  crl [readRequestSTR] :
+  crl [socksfile] :
     < Me : SocksClient | state: readingRequestSTR, read: S, Att >
   =>
     < Me : SocksClient | state: checkingWhitelist, read: Rest, addressType: 3, address: S', Att >
@@ -239,7 +239,7 @@ mod SOCKS is
     Rest := substr(S, 1 + Len, length(S))
     .
 
-  rl [checkWhitelist] :
+  rl [socksfile] :
     < Me : SocksServer | whitelistedAddress: S, Att >
     < socksClient(N, Me) : SocksClient | state: checkingWhitelist, address: S', Att' >
   =>
@@ -247,7 +247,7 @@ mod SOCKS is
     < socksClient(N, Me) : SocksClient | state: (if S == S' then readingPort else shouldClose fi), address: S', Att' >
     .
 
-  crl [readPort] :
+  crl [socksfile] :
     < Me : SocksClient | state: readingPort, read: S, Att >
   =>
     < Me : SocksClient | state: openingTunnel, read: Rest, port: N'', Att >
@@ -259,14 +259,14 @@ mod SOCKS is
     N'' := N * (2 ^ 8) + N'
     .
 
-  rl [openTunnel] :
+  rl [socksfile] :
     < Me : SocksClient | state: openingTunnel, address: S, port: N, Att >
   =>
     < Me : SocksClient | state: waitingOpenTunnel, address: S, port: N, Att >
     createClientTcpSocket(socketManager, Me, S, N)
     .
 
-  rl [openTunnelFailure] :
+  rl [socksfile] :
     < Me : SocksClient | state: waitingOpenTunnel, Att >
     socketError(Me, socketManager, S)
   =>
@@ -274,7 +274,7 @@ mod SOCKS is
     < Me : SocksClient | state: shouldClose, Att >
     .
   
-  rl [openTunnelSuccess] :
+  rl [socksfile] :
     < Me : SocksClient | socketName: SocketName, state: waitingOpenTunnel, addressType: N, address: S, port: N', Att >
     createdSocket(Me, socketManager, NewSocketName)
   =>
@@ -283,14 +283,14 @@ mod SOCKS is
     receive(NewSocketName, Me)
   .
 
-  rl [tunnelingAckSend] :
+  rl [socksfile] :
     < Me : SocksClient | state: tunneling, tunnelSocketName: NewSocketName, Att >
     sent(Me, NewSocketName)
   =>
     < Me : SocksClient | state: tunneling, tunnelSocketName: NewSocketName, Att >
     .
 
-  rl [tunnelingRecv] :
+  rl [socksfile] :
     < Me : SocksClient | state: tunneling, socketName: SocketName, tunnelSocketName: NewSocketName, Att >
     received(Me, NewSocketName, S)
   =>
@@ -299,7 +299,7 @@ mod SOCKS is
     send(SocketName, Me, S)
     .
 
-  crl [tunnelingSend] :
+  crl [socksfile] :
     < Me : SocksClient | state: tunneling, read: S, tunnelSocketName: NewSocketName, Att >  
   =>
     < Me : SocksClient | state: tunneling, read: "", tunnelSocketName: NewSocketName, Att >
@@ -308,7 +308,7 @@ mod SOCKS is
     length(S) > 0
     .
 
-  rl [tunnelClosed] :
+  rl [socksfile] :
     < Me : SocksClient | state: tunneling, tunnelSocketName: NewSocketName, Att >  
     closedSocket(Me, NewSocketName, S)
   =>

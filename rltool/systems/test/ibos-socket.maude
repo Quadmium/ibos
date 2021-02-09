@@ -502,47 +502,47 @@ mod KERNEL is
   **** model they will never be generated.
 
   **** Made into a topmost labeled conditional rule from module WEBAPP
-  rl [fetch] :
+  rl [ibosfile] :
      { < WI | rendered(L) ,  URL(L') , loading(false) , toKernel(ML) ,                                    Att > Cnf }
   => { < WI | rendered(L) ,  URL(L') , loading(true)  , toKernel(ML @ msg(WI,network,MSG-FETCH-URL,L')) , Att > Cnf } .
 
   **** Made into a labeled topmost conditional rule from module WEBAPP
-  rl [render] :
+  rl [ibosfile] :
      { < WI | rendered(L)  , URL(L') , loading(true) , fromKernel(msg(PPI1, WI, MSG-RETURN-URL,L2) @ ML) , Att > Cnf }
   => { < WI | rendered(L2) , URL(L') , loading(true) , fromKernel(ML) ,                                    Att > Cnf } .
 
   **** Made into a topmost rule from module NETWORK
   **** kernel tells network process to fetch data for a webapp
   **** TODO: check that returnTo does the right thing (it seems like returnTo should be stored per URL to fetch)
-  rl [request-from-webapp] :
+  rl [ibosfile] :
      { < NI | returnTo(PPI1), out(LL),     fromKernel(msg(PPI2, NI, MSG-FETCH-URL, L) @ ML'), Att > Cnf }
   => { < NI | returnTo(PPI2), out(LL ; L), fromKernel(ML') ,                                  Att > Cnf } .
 
   **** Made into a labeled topmost rule from module NETWORK
   **** network process moves data from its DMA response buffer into its input buffer
-  rl [proc-in] :
+  rl [ibosfile] :
      { < NI | in(LL),       mem-in(L)       , Att > Cnf }
   => { < NI | in(LL ; L) ,  mem-in(nolabel) , Att > Cnf } .
 
   **** Made into a topmost rule from module NETWORK
   **** network process moves data from its output buffer into its DMA request buffer
-  rl [proc-out] :
+  rl [ibosfile] :
      { < NI | out(L ; LL), mem-out(nolabel) , Att > Cnf }
   => { < NI | out(LL)    , mem-out(L)       , Att > Cnf } .
 
-  rl [nic1] :
+  rl [ibosfile] :
      { < nic | nic-out(L & LS) , in(LL)     , Att > Cnf }
   => { < nic | nic-out(LS)     , in(LL ; L) , Att > Cnf } .
 
   **** Made into a topmost rule from module NETWORK
   **** network process hands data back to other process (in this case: webapp)
-  rl [msg-to-kernel] :
+  rl [ibosfile] :
      { < NI | returnTo(PPI1) , in(L ; LL), toKernel(ML) ,                                    Att > Cnf }
   => { < NI | returnTo(PPI1) , in(LL)    , toKernel(ML @ msg(NI, PPI1, MSG-RETURN-URL, L)) , Att > Cnf } .
 
   **** Made into a topmost rule from module KERNEL-POLICIES
   **** kernel moves dma request from dma request buffer to NIC
-  rl [mem-out] :
+  rl [ibosfile] :
      { < NI     | mem-out(L') ,                      Att  >
        < kernel | netlabels(pi(NI, L, L'),np NPIS) , Att2 >
        < nic    | nic-out(LS) ,                      Att3 > Cnf }
@@ -552,7 +552,7 @@ mod KERNEL is
 
   **** Made into a topmost rule from module KERNEL-POLICIES
   **** kernel moves dma response from NIC to dma response buffer
-  rl [mem-in] :
+  rl [ibosfile] :
      { < NI     | mem-in(nolabel) ,                  Att  >
        < kernel | netlabels(pi(NI, L, L'),np NPIS) , Att2 >
        < nic    | in(L' ; LL) ,                      Att3 > Cnf }
@@ -562,7 +562,7 @@ mod KERNEL is
 
   **** the following [kernelReceviesOPMessage] rules all have a kernel object and a pipe
   **** policy allows message from PPI1 to PPI2 with MsgType
-  rl [kernelReceivesOPMessage-pa1] :
+  rl [ibosfile] :
      { < kernel | handledCurrently(none), msgPolicy(policy(PPI1,PPI2,MT),ps MP), Att  >
        < PPI1   | toKernel(msg(ORG,PPI2,MT,L) @ ML),                             Att2 > Cnf }
   =>
@@ -570,7 +570,7 @@ mod KERNEL is
        < PPI1   | toKernel(ML) ,                                                                   Att2 > Cnf } .
 
   **** policy allows message from webapp to NNPI2 (not network proc) with MT
-  rl [kernelReceivesOPMessage-pa2] :
+  rl [ibosfile] :
      { < kernel | handledCurrently(none), msgPolicy(policy(webapp,NNPI2,MT),ps MP), Att  >
        < WI     | toKernel(msg(ORG, NNPI2, MT, L) @ ML),                            Att2 > Cnf }
   =>
@@ -578,7 +578,7 @@ mod KERNEL is
        < WI     | toKernel(ML) ,                                                                     Att2 > Cnf } .
 
   **** policy allows message from NNPI1 (not network proc) to webapp with MT
-  rl [kernelReceivesOPMessage-pa3] :
+  rl [ibosfile] :
      { < kernel | handledCurrently(none), msgPolicy(policy(NNPI1,webapp,MT),ps MP), Att  >
        < NNPI1  | toKernel(msg(ORG, WI, MT, L) @ ML),                               Att2 > Cnf }
   =>
@@ -586,7 +586,7 @@ mod KERNEL is
        < NNPI1  | toKernel(ML) ,                                                                     Att2 > Cnf } .
 
   **** policy allows message from network proc to NWPI2 (not webapp) with MT
-  rl [kernelReceivesOPMessage-pa4] :
+  rl [ibosfile] :
      { < kernel | handledCurrently(none), msgPolicy(policy(network,NWPI2,MT),ps MP), Att  >
        < NI     | toKernel(msg(ORG, NWPI2, MT, L) @ ML),                             Att2 > Cnf }
   =>
@@ -594,7 +594,7 @@ mod KERNEL is
        < NI     | toKernel(ML),                                                                       Att2 > Cnf } .
 
   **** policy allows message from NWPI1 (not webapp) to network proc with MT
-  rl [kernelReceivesOPMessage-pa5] :
+  rl [ibosfile] :
      { < kernel | handledCurrently(none), msgPolicy(policy(NWPI1,network,MT),ps MP), Att  >
        < NWPI1  | toKernel(msg(ORG, NI, MT, L) @ ML),                                Att2 > Cnf }
   =>
@@ -610,7 +610,7 @@ mod KERNEL is
   **** webapp  WI is labelled with L, sending message ORG -> NI with label L'
   **** netproc NI source is labelled with L, target is labelled with L'
   **** resulting message is WI -> NI with label L'
-  rl [kernelReceivesOPMessage-pa6-a] :
+  rl [ibosfile] :
      { < kernel |
            handledCurrently(none),
            msgPolicy(policy(webapp,network,MT),ps MP),
@@ -637,7 +637,7 @@ mod KERNEL is
   **** rule, start a new network proc - this assumes that there will
   **** be no more than 772 network procs started, to prevent that, we
   **** would need to check "Num'' < 1024" :
- crl [kernelReceivesOPMessage-pa6-b] :
+ crl [ibosfile] :
      { < kernel |
            handledCurrently(none),
            msgPolicy(policy(webapp,network,MT),ps MP),
@@ -672,7 +672,7 @@ mod KERNEL is
   **** there is a connection, just forward the message
   **** network proc answering to webapp, thus having the correct recipient:
   **** if there is no connection, we drop by pa10
-  rl [kernelReceivesOPMessage-pa7] :
+  rl [ibosfile] :
      { < kernel |
            handledCurrently(none),
            msgPolicy(policy(network,webapp,MT),ps MP),
@@ -696,7 +696,7 @@ mod KERNEL is
        Cnf } .
 
   **** policy allows message from UI to change current webapp to webapp WI with MSG-SWITCH-TAB
-  rl [kernelReceivesOPMessage-pa8] :
+  rl [ibosfile] :
      { < kernel |
            handledCurrently(none),
            msgPolicy(policy(ui,webapp,MSG-SWITCH-TAB),ps MP),
@@ -716,7 +716,7 @@ mod KERNEL is
        Cnf } .
 
   **** policy allows message from UI to change current webapp to a new webapp loading URL with MSG-NEW-URL
-  rl [kernelReceivesOPMessage-pa9] :
+  rl [ibosfile] :
      { < kernel | handledCurrently(none), msgPolicy(policy(ui,webapp,MSG-NEW-URL),ps MP), Att  >
        < ui     | toKernel(msg(ORG,webapp, MSG-NEW-URL, L) @ ML),                         Att2 >
        Cnf }
@@ -731,7 +731,7 @@ mod KERNEL is
        Cnf } .
 
   **** no policy allowed this, therefore implicitly disallowed and dropped
-  rl [kernelReceivesOPMessage-pa10] :
+  rl [ibosfile] :
      { < kernel | handledCurrently(none), msgPolicy(MP),  Att  >
        < PPI1   | toKernel(msg(ORG, GPPI, MT, L) @ ML),   Att2 > Cnf }
   =>
@@ -739,7 +739,7 @@ mod KERNEL is
        < PPI1   | toKernel(ML),                          Att2 > Cnf } .
 
   **** Made into a topmost rule from module KERNEL-POLICIES
-  crl [kernelForwardsOPMessage] :
+  crl [ibosfile] :
      { < kernel | handledCurrently(msg(PPI1, PPI2, MT, L)) , Att  >
        < PPI2   | fromKernel(ML) ,                           Att2 > Cnf }
   =>
@@ -748,7 +748,7 @@ mod KERNEL is
   if MT ~m MSG-SWITCH-TAB == false .
 
   **** Made into a topmost rule from module KERNEL-POLICIES
-  rl [tab-change] :
+  rl [ibosfile] :
      { < kernel  |
            handledCurrently(msg(ui, WI', MSG-SWITCH-TAB, L1)),
            displayedTopBar(L2),
@@ -779,7 +779,7 @@ mod KERNEL is
   **** A. there was another constructor for label in the specification;
   **** such a definition was moved to module LABEL and the equality
   **** enrichment defined accordingly
- crl [change-display] :
+ crl [ibosfile] :
      { < display | activeWebapp(WI), displayedContent(L),  Att2 >
        < WI      | rendered(L'),                           Att3 > Cnf }
   => { < display | activeWebapp(WI), displayedContent(L'), Att2 >
@@ -787,7 +787,7 @@ mod KERNEL is
    if L ~l L' = false .
 
   **** Made into a topmost rule from module KERNEL-POLICIES
-  rl [new-url] :
+  rl [ibosfile] :
      { < kernel    |
            handledCurrently(msg(ui, webapp, MSG-NEW-URL, URL)),
            displayedTopBar(L),
@@ -827,7 +827,7 @@ mod IBOS-STOP is
   pr IBOS .
   var C : Configuration .
   op [_] : Configuration -> State [ctor metadata "87"] .
-  rl [stop] : { C } => [ C ] .
+  rl [ibosfile] .
 endm
 )
 
@@ -928,7 +928,7 @@ mod IBOS-EXTEND is
   op nextPort:_ : Nat -> Attribute [ctor] .
 
   op startIBOS : -> Configuration .
-  rl [startIBOS] : 
+  rl [ibosfile] : 
     startIBOS
   =>
     ---<>
@@ -953,7 +953,7 @@ mod IBOS-EXTEND is
 
   ---op debug : String -> Msg [ctor msg] .
 
-  crl [newNetworkApp] :
+  crl [ibosfile] :
     < stateTracker : StateTracker | lastNetlabels: NPIS, procAndPort: NPAP, nextPort: N, Att >
     < kernel | netlabels((NPI ,np NPIS')), Att2 > 
   =>
@@ -969,7 +969,7 @@ mod IBOS-EXTEND is
     pi(CNPID, url(S, S'), url(S, S')) := NPI
     .
 
-  rl [createdSocket2] : 
+  rl [ibosfile] : 
     < socketClient : SocketClient | state: connecting, name: noname, read: S >
     createdSocket(socketClient, socketManager, TS)
   => 
@@ -977,7 +977,7 @@ mod IBOS-EXTEND is
     receive(TS, socketClient)
     .
 
-  crl [receivedNewURL] : 
+  crl [ibosfile] : 
     < socketClient : SocketClient | state: active, name: TS, read: S >
     < ui | toKernel(ML) >
   =>
@@ -992,7 +992,7 @@ mod IBOS-EXTEND is
     S''' := afterDelim(S', "|")
     .
 
-  crl [receivedSwitchTab] : 
+  crl [ibosfile] : 
     < socketClient : SocketClient | state: active, name: TS, read: S >
     < ui | toKernel(ML) >
   =>  
@@ -1005,7 +1005,7 @@ mod IBOS-EXTEND is
     S' := afterDelim(Data, "|")
     .
 
-  crl [receivedFetchState] : 
+  crl [ibosfile] : 
     < socketClient : SocketClient | state: active, name: TS, read: S >
     < display | activeWebapp(webapp(N)), Att2 >
     < kernel | displayedTopBar(L), weblabels(WPIS), netlabels(NPIS), Att >
@@ -1020,7 +1020,7 @@ mod IBOS-EXTEND is
     Rest := afterDelim(S, "#")
     .
   
-  rl [received] :
+  rl [ibosfile] :
     < socketClient : SocketClient | state: active, name: TS, read: S >
     received(socketClient, TS, S')
   =>
@@ -1028,7 +1028,7 @@ mod IBOS-EXTEND is
     receive(TS, socketClient)
     .
 
-  rl [sent3] :
+  rl [ibosfile] :
     < socketClient : SocketClient | state: active, name: TS, read: S >
     sent(socketClient, TS)
   =>
