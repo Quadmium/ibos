@@ -969,7 +969,7 @@ mod IBOS-EXTEND is
     pi(CNPID, url(S, S'), url(S, S')) := NPI
     .
 
-  rl [createdSocket] : 
+  rl [createdSocket2] : 
     < socketClient : SocketClient | state: connecting, name: noname, read: S >
     createdSocket(socketClient, socketManager, TS)
   => 
@@ -1028,7 +1028,7 @@ mod IBOS-EXTEND is
     receive(TS, socketClient)
     .
 
-  rl [sent] :
+  rl [sent3] :
     < socketClient : SocketClient | state: active, name: TS, read: S >
     sent(socketClient, TS)
   =>

@@ -86,7 +86,7 @@ mod SOCKS is
     createServerTcpSocket(socketManager, socksServer(N), N, 5)
     .
 
-  rl [receive] :
+  rl [receive2] :
     < Me : SocksClient | socketName: SocketName, read: S, Att >
     received(Me, SocketName, S')
   =>
@@ -94,7 +94,7 @@ mod SOCKS is
     receive(SocketName, Me)
     .
 
-  rl [sent] :
+  rl [sent2] :
     < Me : SocksClient | socketName: SocketName, Att >
     sent(Me, SocketName)
   =>
@@ -143,7 +143,7 @@ mod SOCKS is
     acceptClient(SocketName, Me)
     .
 
-  rl [acceptedClient] :
+  rl [acceptedClient2] :
     < Me : SocksServer | socketName: SocketName, nextClientID: N, Att >
     acceptedClient(Me, SocketName, Address, NewSocketName)
   =>

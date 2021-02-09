@@ -180,9 +180,9 @@ op newUrlAction : -> Msg [ctor] .
 
 op inspect : Nat -> Configuration .
 
-rl inspect(0) => createUI .
-crl inspect(N) => newUrlAction inspect(N - 1) if N > 0 .
-crl inspect(N) => switchTabAction inspect(N - 1) if N > 0 .
+rl [a] : inspect(0) => createUI .
+crl [b] : inspect(N) => newUrlAction inspect(N - 1) if N > 0 .
+crl [c]: inspect(N) => switchTabAction inspect(N - 1) if N > 0 .
 
 op urlFromNat : Nat -> String .
 eq urlFromNat(N) = "0.0.0." + string(N, 10) .
