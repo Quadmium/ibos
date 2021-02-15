@@ -80,6 +80,18 @@ srew {startTest(2)} using ((testfile)! | (socksfile)! | (socketfile)! | (ibosfil
 srew {startTest(2)} using ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!)* .
 
 
+- can say how many solutions we want using search
+- search init =>! exp. s.t. C using strategy .
+  - should give you solutions where the strategy cannot be continued
+  - probably means terminating state
+  - may not be what we want if searching for violation. predicated may be violated before termination
+
+=>! will only show you states dealing with (state, continuation of strategy). will see what remains to be done of the strategy. a ; b ; c, then b ; c, then c, then nothing. bang will give state where continuation is idle. may use it for testing but dont want for finding invariants.
+
+=>! normal search without strategy will find terminating states and then check whether the property is satisfied.
+=>! with strategy will give states in which strategy has terminated. if give bang for a ; b ; c, then will be just terminating for the strategy so a applied b applied c applied, then strategy has terminated and it will show us that.
+
+- search[1] syntax can show you first solution finds , if looking for violation one solution is enough
 
 rewrites: 8977
 
@@ -126,7 +138,13 @@ run (to termination any file) until not(to termination any file)
 
 srew {startTest(2)} using ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!)* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) .
 
+- TODO check if theres AND for this not ; not ; not ; not
 
+- take a look at how socket was done in the other paper
+- want sockets to be a faithful abstraction of what actually happens (second look at how socket external objects are described in the book / manual and the paper) so that our mimicking really reflects directly what is happening. if there is distance between the two may experience problems that are not really problems.
+
+
+{ Config Config }
 
 Bug we found
 
@@ -155,6 +173,13 @@ if
 
 
 
+
+
+
+
+
+
+
 Bug we found
 **** no policy allowed this, therefore implicitly disallowed and dropped
 rl [ibosfile] :
@@ -165,7 +190,34 @@ rl [ibosfile] :
      < PPI1   | toKernel(ML),                          Att2 > Cnf } .
 
 
+- can send this to skeirik and carbon copy
+- fewer behaviors usually doesnt cause problems, but more behaviors does.
+- this model has a bug, skeirik should know, think about how to correct the rule or he can also figure it out
+
+
+
+search {startTest(4)} =>* (X:State) s.t. not IABC(X:State) using ((havoc) | ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!))* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) .
+
+
+
+
+
+
+
+
+
+
+
+
+
 srew {startTest(2)} using ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!)* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) ; match (X:State) s.t. not IABC(X:State) .
+
+- searching and testing, strategy as a whole terminates when the test is satisfied, doesnt mean it cannot continue.
+- in the srew, if rewrite it to termination then it will give us all the states that have fully evaluated the strategy. if want to show only when S.T. condition holds, doing these tests and if it holds then thats the result of the strategy.
+
+
+
+
 search {startTest(8)} =>* (X:State) s.t. not IABC(X:State) using ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!)* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) .
 search {startTest(8)} =>* (X:State) s.t. not IABC(X:State) .
 
@@ -200,6 +252,49 @@ search {startTest(5)} =>* (X:State) s.t. not IABC(X:State) using ((havoc) | ((te
 
 
 
+- important thing is to make sure its reproducible. if can send something smaller then easier. shouldn't spend a huge amount of time on that. if with not much effort we can simplify then worth it.
+- Some high level explanation of what is going on - what its trying to do and what went wrong.
+- he would probably more interested in how the strategies are being evaluated to find the bug.
+- notify, he can probably give us better version which fixes
+- possible its a maude bug
+
+
+- here is search command, here is way we wrote strategy to mimic search using srew, and he can check if its faithful.
+
+
+
+
+
+
 - Figure out why havoc! doesnt work in above command depth 4
 
 - Try to split test rules into two
+
+
+
+
+-Trying to extend security properties of client <-> server
+  - download page -> retreicive other resources -> make more requests -> only whitelisted ones work (and also for uploading data)
+  - verifies proxy correctness
+
+- May be related to formal patterns paper:
+  - the properties are about security of communication
+  - some enforceable by kernel, some enforceable by other component like proxy
+  - these things can be modular
+
+- want to think about code as modular instead of mixed together
+- could modify client/server to do crypto. smart way is to create metaobjects between client and server, which wrap object and server. the code remains the same but the wrapper intercepts and encrypts.
+- attacker that wants to read content of message can be done in previous situation
+- with this protection now cannot do it
+- also have a model of an attacker
+- two systems do the same thing, but this one now protects against a hostile environment in which you have to live. can be for cryptography or another exampe is fault tolerance
+- for fault tolerance attacker is rules that drop messages, to cope with that add meta objects that send acknowledgements, keep counts, resending stuff, that the original system didnt do.
+
+- suggestion to think about these things since we're exploring different possibilities and security properties. Should explore it in a modular way. What are the meta objects that solve a problem. Take a look at "Formal patterns" paper.
+- will help architecture
+- each meta object comes with guarantees. if use enc, maicious cannot work. same idea with DOS attacks. original system doesnt know anything about this stuff but can now live in a malicious environment.
+- may also make the verification more modular
+- next time talk about issue of proxy, security policy for that, our thoughts for how this could be modeled or understood as a pattern or metaobject or something like that
+- inform everyone ^ about issues
+
+
