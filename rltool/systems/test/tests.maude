@@ -65,9 +65,10 @@ eq portToBytes(N) = char(N quo (2 ^ 8)) + char(N rem (2 ^ 8)) .
 --- end From SOCKS
 
 crl [createClientManager] :
-  { Config }
+  { <> Config }
 =>
   {
+    <>
     < clientManager : ClientManager | nextNumber: 0 >
     Config
   }
