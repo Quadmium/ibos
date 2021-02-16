@@ -1,159 +1,10 @@
 ***(
 
-search {startTest(4)} =>* (X:State) s.t. not IABC(X:State) using ((havoc-keep) | ((tests)! ; (socks)! ; (socket_mock)! ; (ibos-socket)!))* ; not(tests) ; not(socks) ; not(socket_mock) ; not(ibos-socket) .
+search {startTest(4)} =>* (X:State) s.t. not IABC(X:State) using (havoc-keep | ((allowNextAction-keep)! ; (tests)! ; (((client)! ; (socks)! ; (socket_mock)! ; (ibos-socket)!)* ; not(client) ; not(socks) ; not(socket_mock) ; not(ibos-socket))))* ; not(allowNextAction-keep) ; not(tests) .
 
 )
 
-load socks.maude
-load ibos-socket.maude
-
-mod CLIENT is
-pr CONFIGURATION .
-pr SOCKS .
-
-vars N N' N'' N''' Port : Nat .
-vars Address S S' Rest : String .
-vars Config : Configuration .
-vars Me CM SocketName : Oid .
-vars Att : AttributeSet .
-
-op createClient : Nat String Nat -> Msg [ctor msg] .
-
-op client : Nat -> Oid [ctor] .
-op Client : -> Cid [ctor] .
-
-op clientManager : -> Oid [ctor] .
-op ClientManager : -> Cid [ctor] .
-
-op nextNumber:_ : Nat -> Attribute [ctor] .
-
-sort ClientState .
-ops initial connecting sendingHeader readingMethod sendingRequest readingRequestReply sendingWebsiteMsg readingWebsiteMsg : -> ClientState [ctor] .
-
-op state:_ : ClientState -> Attribute [ctor] .
-op address:_ : Nat -> Attribute [ctor] .
-op port:_ : Nat -> Attribute [ctor] .
-op socketName:_ : Oid -> Attribute [ctor] .
-op read:_ : String -> Attribute [ctor] .
-op forURL:_ : Nat -> Attribute [ctor] .
-
-op clientManagerInConfig : Configuration -> Bool .
-eq clientManagerInConfig(< CM : ClientManager | Att > Config) = true .
-eq clientManagerInConfig(Config) = false [owise] .
-
-
---- From SOCKS maude
-op findNth : String String Nat Nat -> FindResult .
-eq findNth(S, S', N, 0) = find(S, S', N) .
-ceq findNth(S, S', N, N') = findNth(S, S', find(S, S', N) + 1, N' - 1) if N' =/= 0 .
-
-op addressToBytes : String Nat -> String .
---- String address has type 3
-eq addressToBytes(S, 3) = char(length(S)) + S .
---- IPV4 address has type 1
-ceq addressToBytes(S, 1) = 
-  char(N) + char(N') + char(N'') + char(N''')
-if
-  N := rat(substr(S, 0, findNth(S, ".", 0, 0)), 10) /\
-  N' := rat(substr(S, findNth(S, ".", 0, 0) + 1, find(substr(S, findNth(S, ".", 0, 0) + 1, length(S)), ".", 0)), 10) /\
-  N'' := rat(substr(S, findNth(S, ".", 0, 1) + 1, find(substr(S, findNth(S, ".", 0, 1) + 1, length(S)), ".", 0)), 10) /\
-  N''' := rat(substr(S, findNth(S, ".", 0, 2) + 1, length(S)), 10)
-  .
-
-op portToBytes : Nat -> String .
-eq portToBytes(N) = char(N quo (2 ^ 8)) + char(N rem (2 ^ 8)) .
---- end From SOCKS
-
-crl [tests] :
-  { <> Config }
-=>
-  {
-    <>
-    < clientManager : ClientManager | nextNumber: 0 >
-    Config
-  }
-if
-  not clientManagerInConfig(Config)
-  .
-
-rl [tests] :
-  createClient(Port, Address, N')
-  < CM : ClientManager | nextNumber: N, Att >
-=>
-  < client(N) : Client | state: initial, address: Address, port: Port, forURL: N', read: "" >
-  < CM : ClientManager | nextNumber: s(N), Att >
-  .
-
-rl [tests] :
-  < Me : Client | socketName: SocketName, read: S, Att >
-  received(Me, SocketName, S')
-=>
-  < Me : Client | socketName: SocketName, read: (S + S'), Att >
-  receive(SocketName, Me)
-  .
-
-rl [tests] :
-  < Me : Client | socketName: SocketName, Att >
-  sent(Me, SocketName)
-=>
-  < Me : Client | socketName: SocketName, Att >
-  .
-
-rl [tests] :
-  < Me : Client | state: initial, address: Address, port: Port, Att >
-=>
-  createClientTcpSocket(socketManager, Me, "127.0.0.1", Port)
-  < Me : Client | state: connecting, address: Address, port: Port, Att >
-  .
-
-rl [tests] :
-  < Me : Client | state: connecting, Att >
-  createdSocket(Me, socketManager, SocketName)
-=>
-  < Me : Client | state: sendingHeader, socketName: SocketName, Att >
-  receive(SocketName, Me)
-  .
-
-rl [tests] :
-  < Me : Client | state: sendingHeader, socketName: SocketName, Att >
-=>
-  send(SocketName, Me, char(5) + char(1) + char(0))
-  < Me : Client | state: readingMethod, socketName: SocketName, Att >
-  .
-
-crl [tests] :
-  < Me : Client | state: readingMethod, socketName: SocketName, read: S, Att >
-=>
-  < Me : Client | state: sendingRequest, socketName: SocketName, read: Rest, Att >
-if
-  length(S) >= 2 /\
-  Rest := substr(S, 2, length(S))
-  .
-
-rl [tests] :
-  < Me : Client | state: sendingRequest, socketName: SocketName, address: Address, port: Port, Att >
-=>
-  send(SocketName, Me, char(5) + char(1) + char(0) + char(1) + addressToBytes(Address, 1) + portToBytes(80))
-  < Me : Client | state: readingRequestReply, socketName: SocketName, address: Address, port: Port, Att >
-  .
-
-crl [tests] :
-  < Me : Client | state: readingRequestReply, socketName: SocketName, read: S, Att >
-=>
-  < Me : Client | state: sendingWebsiteMsg, socketName: SocketName, read: Rest, Att >
-if
-  length(S) >= 10 /\
-  Rest := substr(S, 10, length(S))
-  .
-
-rl [tests] : 
-  < Me : Client | state: sendingWebsiteMsg, socketName: SocketName, Att >
-=>
-  send(SocketName, Me, "hello")
-  < Me : Client | state: readingWebsiteMsg, socketName: SocketName, Att >
-  .
-
-endm
+load client.maude
 
 mod UI is
 pr CONFIGURATION .
@@ -167,8 +18,6 @@ op serverSocket:_ : Oid -> Attribute [ctor] .
 op ibosSocket:_ : Oid -> Attribute [ctor] .
 
 op nextURL:_ : Nat -> Attribute [ctor] .
-op canTakeAction:_ : Bool -> Attribute [ctor] .
-op startedClient:_ : Bool -> Attribute [ctor] .
 op currentURL:_ : Nat -> Attribute [ctor] .
 op curAction:_ : Msg -> Attribute [ctor] .
 op hasTab:_ : Nat -> Attribute [ctor] .
@@ -178,6 +27,7 @@ vars Sock NewSock Me : Oid .
 vars N N' N'' : Nat .
 vars S S' : String .
 vars M : Msg .
+vars B : Bool .
 
 op createUI : -> Msg [ctor] .
 
@@ -197,7 +47,7 @@ eq urlFromNat(N) = "0.0.0." + string(N, 10) .
 rl [tests] : 
   createUI 
 => 
-  < ui : UI | canTakeAction: false, startedClient: false, currentURL: 0, nextURL: 1, curAction: noAction >
+  < ui : UI | currentURL: 0, nextURL: 1, curAction: noAction >
   createServerTcpSocket(socketManager, ui, 8080, 5)
   .
 
@@ -211,59 +61,36 @@ rl [tests] :
 
 rl [tests] :
   acceptedClient(ui, Sock, "127.0.0.1", NewSock)
-  < ui : UI | canTakeAction: false, Att >
+  < ui : UI | Att >
 =>
-  < ui : UI | ibosSocket: NewSock, canTakeAction: true, Att >
+  < ui : UI | ibosSocket: NewSock, Att >
   .
 
 rl [tests] :
-  < ui : UI | ibosSocket: Sock, canTakeAction: true, currentURL: N', nextURL: N, curAction: M, Att >
+  < ui : UI | ibosSocket: Sock, currentURL: N', nextURL: N, curAction: noAction, Att >
   newUrlAction
 =>
-  < ui : UI | ibosSocket: Sock, canTakeAction: false, currentURL: N, nextURL: s(N), curAction: newUrlAction, hasTab: N, Att >
+  createClient(8080 + N, urlFromNat(N), N)
+  < ui : UI | ibosSocket: Sock, currentURL: N, nextURL: s(N), curAction: newUrlAction, hasTab: N, Att >
   send(Sock, ui, "MSG-NEW-URL|" + urlFromNat(N) + "|" + urlFromNat(N) + "#")
   .
 
 crl [tests] :
-  < ui : UI | canTakeAction: false, startedClient: false, currentURL: N, curAction: newUrlAction, Att >
-  < display | displayedContent(url(S, S)), Att' >
-=>
-  createClient(8080 + N, urlFromNat(N), N)
-
-  < ui : UI | canTakeAction: false, startedClient: true, currentURL: N, curAction: newUrlAction, Att >
-  < display | displayedContent(url(S, S)), Att' >
-if
-  S == urlFromNat(N)
-  .
-
-crl [tests] :
-  < ui : UI | canTakeAction: false, startedClient: true, currentURL: N, curAction: newUrlAction, Att >
-  < Me : Client | forURL: N, state: readingWebsiteMsg, read: S, Att' >
-=>
-  < ui : UI | canTakeAction: true, startedClient: false, currentURL: N, curAction: noAction, Att >
-  < Me : Client | forURL: N, state: readingWebsiteMsg, read: S, Att' >
-if
-  S == urlFromNat(N) + ":80#"
-  .
-
-crl [tests] :
-  < ui : UI | ibosSocket: Sock, canTakeAction: true, currentURL: N', nextURL: N, curAction: M, hasTab: N'', Att >
+  < ui : UI | ibosSocket: Sock, currentURL: N', nextURL: N, curAction: noAction, hasTab: N'', Att >
   switchTabAction
 =>
-  < ui : UI | ibosSocket: Sock, canTakeAction: false, currentURL: N'', nextURL: N, curAction: switchTabAction, Att >
+  < ui : UI | ibosSocket: Sock, currentURL: N'', nextURL: N, curAction: switchTabAction, Att >
   send(Sock, ui, "MSG-SWITCH-TAB|" +  string(N'' - 1, 10) + "#")
 if
   N'' =/= N'
   .
 
-crl [tests] :
-  < ui : UI | canTakeAction: false, currentURL: N, curAction: switchTabAction, Att >
-  < display | displayedContent(url(S, S)), Att' >
+crl [allowNextAction-keep] : 
+  < ui : UI | curAction: M, Att >
 =>
-  < ui : UI | canTakeAction: true, currentURL: N, curAction: noAction, Att >
-  < display | displayedContent(url(S, S)), Att' >
+  < ui : UI | curAction: noAction, Att >
 if
-  S == urlFromNat(N)
+  M =/= noAction
   .
 
 --- Only fails with depth >= 4
