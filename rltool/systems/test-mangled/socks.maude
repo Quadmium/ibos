@@ -1,0 +1,320 @@
+load socket_mock.maude
+
+***(
+op start : -> Configuration .
+rl [socks] :
+  start
+=>
+  <>
+  --- news.ycombinator.com
+  createSocksServer(8082, "209.216.230.240")
+  .
+)
+
+mod SOCKS is
+  pr CONFIGURATION .
+  pr NAT .
+  pr INT .
+  pr SOCKET .
+  pr CONVERSION .
+  
+  ---op debug : String -> Msg [ctor msg] .
+  ---op debug : Nat -> Msg [ctor msg] .
+
+  --- SocksServer(port)
+  op SocksServer : -> Cid [ctor] .
+  op socksServer : Nat -> Oid [ctor] .
+
+  --- createSocksServer(port, whitelisted address)
+  op createSocksServer : Nat String -> Msg [ctor msg] .
+  op createdSocksServer : Nat -> Msg [ctor msg] .
+
+  op SocksClient : -> Cid [ctor] .
+  op socksClient : Nat Oid -> Oid [ctor] .
+
+  --- Socks client attributes
+  op originServer:_ : Oid -> Attribute [ctor] .
+  
+  sort SocksClientState .
+  ops connected waitingForHeader readingRequest1 readingRequest2 readingRequestIPV4 readingRequestSTR checkingWhitelist readingPort shouldClose openingTunnel waitingOpenTunnel tunneling tunnelingDisconnected closed : -> SocksClientState [ctor] .
+  op readingMethods : Int -> SocksClientState [ctor] .
+  op state:_ : SocksClientState -> Attribute [ctor] .
+  op read:_ : String -> Attribute [ctor] .
+  op addressType:_ : Nat -> Attribute [ctor] .
+  op address:_ : String -> Attribute [ctor] .
+  op port:_ : Nat -> Attribute [ctor] .
+  op tunnelSocketName:_ : Oid -> Attribute [ctor] .
+
+  op whitelistedAddress:_ : String -> Attribute [ctor] .
+
+  --- Server attributes
+  op socketName:_ : Oid -> Attribute [ctor] .
+  op nextClientID:_ : Nat -> Attribute [ctor] .
+
+  vars SocketName Me NewSocketName O : Oid .
+  vars S S' Address Data Rest : String .
+  vars N N' N'' N''' Len : Nat .
+  vars I I' I'' : Int .
+  vars Att Att' : AttributeSet .
+  var STATE : SocksClientState .
+
+  op findNth : String String Nat Nat -> FindResult .
+  eq findNth(S, S', N, 0) = find(S, S', N) .
+  ceq findNth(S, S', N, N') = findNth(S, S', find(S, S', N) + 1, N' - 1) if N' =/= 0 .
+
+  op addressToBytes : String Nat -> String .
+  --- String address has type 3
+  eq addressToBytes(S, 3) = char(length(S)) + S .
+  --- IPV4 address has type 1
+  ceq addressToBytes(S, 1) = 
+    char(N) + char(N') + char(N'') + char(N''')
+  if
+    N := rat(substr(S, 0, findNth(S, ".", 0, 0)), 10) /\
+    N' := rat(substr(S, findNth(S, ".", 0, 0) + 1, find(substr(S, findNth(S, ".", 0, 0) + 1, length(S)), ".", 0)), 10) /\
+    N'' := rat(substr(S, findNth(S, ".", 0, 1) + 1, find(substr(S, findNth(S, ".", 0, 1) + 1, length(S)), ".", 0)), 10) /\
+    N''' := rat(substr(S, findNth(S, ".", 0, 2) + 1, length(S)), 10)
+    .
+
+  op portToBytes : Nat -> String .
+  eq portToBytes(N) = char(N quo (2 ^ 8)) + char(N rem (2 ^ 8)) .
+
+  rl [socks] :
+    createSocksServer(N, S)
+  =>
+    < socksServer(N) : SocksServer | whitelistedAddress: S >
+    createdSocksServer(N)
+    createServerTcpSocket(socketManager, socksServer(N), N, 5)
+    .
+
+  rl [socks] :
+    < Me : SocksClient | socketName: SocketName, read: S, Att >
+    received(Me, SocketName, S')
+  =>
+    < Me : SocksClient | socketName: SocketName, read: (S + S'), Att >
+    receive(SocketName, Me)
+    .
+
+  rl [socks] :
+    < Me : SocksClient | socketName: SocketName, Att >
+    sent(Me, SocketName)
+  =>
+    < Me : SocksClient | socketName: SocketName, Att >
+    .
+
+  crl [socks] :
+    <>
+    < Me : SocksClient | state: STATE, socketName: SocketName, Att >
+    closedSocket(Me, SocketName, S)
+  => 
+    <>
+  if
+    STATE =/= tunneling
+    .
+  
+  --- Clean up the tunnel socket if we lose main socket unexpectedly
+  rl [socks] :
+    < Me : SocksClient | state: tunneling, socketName: SocketName, tunnelSocketName: NewSocketName, Att >
+    closedSocket(Me, SocketName, S)
+  => 
+    < Me : SocksClient | state: tunnelingDisconnected, socketName: SocketName, tunnelSocketName: NewSocketName, Att >
+    closeSocket(NewSocketName, Me)
+    .
+
+  rl [socks] : 
+    <>
+    < Me : SocksClient | state: tunnelingDisconnected, tunnelSocketName: NewSocketName, Att >
+    closedSocket(Me, NewSocketName, S)
+  =>
+    <>
+    .
+
+  rl [socks] : 
+    < Me : SocksClient | socketName: SocketName, state: shouldClose, Att >
+  =>
+    < Me : SocksClient | socketName: SocketName, state: closed, Att >
+    closeSocket(SocketName, Me)
+    .
+
+  rl [socks] :
+    < Me : SocksServer | Att >
+    createdSocket(Me, socketManager, SocketName)
+  =>
+    < Me : SocksServer | socketName: SocketName, nextClientID: 0, Att >
+    acceptClient(SocketName, Me)
+    .
+
+  rl [socks] :
+    < Me : SocksServer | socketName: SocketName, nextClientID: N, Att >
+    acceptedClient(Me, SocketName, Address, NewSocketName)
+  =>
+    < Me : SocksServer | socketName: SocketName, nextClientID: (N + 1), Att >
+    acceptClient(SocketName, Me)
+    < socksClient(N, Me) : SocksClient | socketName: NewSocketName, state: connected, read: "" >
+    .
+
+  rl [socks] : 
+    < Me : SocksClient | socketName: SocketName, state: connected, Att >
+  =>
+    receive(SocketName, Me)
+    < Me : SocksClient | socketName: SocketName, state: waitingForHeader, Att >
+    .
+  
+  crl [socks] :
+    < Me : SocksClient | state: waitingForHeader, read: S, Att >
+  =>
+    < Me : SocksClient | state: readingMethods(N), read: Rest, Att >
+  if
+    length(S) >= 2 /\
+    Data := substr(S, 0, 2) /\
+    Rest := substr(S, 2, length(S)) /\
+    N := ascii(substr(Data, 1, 1))
+    .
+  
+  crl [socks] :
+    < Me : SocksClient | state: readingMethods(I), read: S, Att >
+  =>
+    < Me : SocksClient | state: readingMethods(I - I'), read: Rest, Att >
+  if
+    length(S) > 0 /\
+    I > 0 /\
+    I' := min(I, length(S)) /\
+    Rest := substr(S, I', length(S))
+    .
+
+  rl [socks] :
+    < Me : SocksClient | socketName: SocketName, state: readingMethods(0), Att >
+  =>
+    < Me : SocksClient | socketName: SocketName, state: readingRequest1, Att >
+    send(SocketName, Me, char(5) + char(0))
+  .
+
+  crl [socks] :
+    < Me : SocksClient | state: readingRequest1, read: S, Att >
+  =>
+    < Me : SocksClient | state: (if N == 1 then readingRequest2 else shouldClose fi), read: Rest, Att >
+  if
+    length(S) >= 2 /\
+    Data := substr(S, 0, 2) /\
+    Rest := substr(S, 2, length(S)) /\
+    N := ascii(substr(Data, 1, 1))
+    .
+
+  crl [socks] :
+    < Me : SocksClient | state: readingRequest2, read: S, Att >
+  =>
+    < Me : SocksClient | 
+      state: (if N == 1 then readingRequestIPV4 else (if N == 3 then readingRequestSTR else shouldClose fi) fi), 
+      read: Rest, Att >
+  if
+    length(S) >= 2 /\
+    Data := substr(S, 0, 2) /\
+    Rest := substr(S, 2, length(S)) /\
+    N := ascii(substr(Data, 1, 1))
+    .
+
+  crl [socks] :
+    < Me : SocksClient | state: readingRequestIPV4, read: S, Att >
+  =>
+    < Me : SocksClient | state: checkingWhitelist, read: Rest, addressType: 1, address: S', Att >
+  if
+    length(S) >= 4 /\
+    Data := substr(S, 0, 4) /\
+    Rest := substr(S, 4, length(S)) /\
+    N := ascii(substr(Data, 0, 1)) /\
+    N' := ascii(substr(Data, 1, 1)) /\
+    N'' := ascii(substr(Data, 2, 1)) /\
+    N''' := ascii(substr(Data, 3, 1)) /\
+    S' := string(N, 10) + "." + string(N', 10) + "." + string(N'', 10) + "." + string(N''', 10)
+    .
+  
+  crl [socks] :
+    < Me : SocksClient | state: readingRequestSTR, read: S, Att >
+  =>
+    < Me : SocksClient | state: checkingWhitelist, read: Rest, addressType: 3, address: S', Att >
+  if
+    length(S) >= 1 /\
+    Len := ascii(substr(S, 0, 1)) /\
+    length(S) >= 1 + Len /\
+    S' := substr(S, 1, Len) /\
+    Rest := substr(S, 1 + Len, length(S))
+    .
+
+  rl [socks] :
+    < Me : SocksServer | whitelistedAddress: S, Att >
+    < socksClient(N, Me) : SocksClient | state: checkingWhitelist, address: S', Att' >
+  =>
+    < Me : SocksServer | whitelistedAddress: S, Att >
+    < socksClient(N, Me) : SocksClient | state: (if S == S' then readingPort else shouldClose fi), address: S', Att' >
+    .
+
+  crl [socks] :
+    < Me : SocksClient | state: readingPort, read: S, Att >
+  =>
+    < Me : SocksClient | state: openingTunnel, read: Rest, port: N'', Att >
+  if
+    length(S) >= 2 /\
+    Rest := substr(S, 2, length(S)) /\
+    N := ascii(substr(S, 0, 1)) /\
+    N' := ascii(substr(S, 1, 1)) /\
+    N'' := N * (2 ^ 8) + N'
+    .
+
+  rl [socks] :
+    < Me : SocksClient | state: openingTunnel, address: S, port: N, Att >
+  =>
+    < Me : SocksClient | state: waitingOpenTunnel, address: S, port: N, Att >
+    createClientTcpSocket(socketManager, Me, S, N)
+    .
+
+  rl [socks] :
+    < Me : SocksClient | state: waitingOpenTunnel, Att >
+    socketError(Me, socketManager, S)
+  =>
+    --- Should give a real reply that it failed
+    < Me : SocksClient | state: shouldClose, Att >
+    .
+  
+  rl [socks] :
+    < Me : SocksClient | socketName: SocketName, state: waitingOpenTunnel, addressType: N, address: S, port: N', Att >
+    createdSocket(Me, socketManager, NewSocketName)
+  =>
+    < Me : SocksClient | socketName: SocketName, state: tunneling, addressType: N, address: S, port: N', tunnelSocketName: NewSocketName, Att >
+    send(SocketName, Me, char(5) + char(0) + char(0) + char(N) + addressToBytes(S, N) + portToBytes(N'))
+    receive(NewSocketName, Me)
+  .
+
+  rl [socks] :
+    < Me : SocksClient | state: tunneling, tunnelSocketName: NewSocketName, Att >
+    sent(Me, NewSocketName)
+  =>
+    < Me : SocksClient | state: tunneling, tunnelSocketName: NewSocketName, Att >
+    .
+
+  rl [socks] :
+    < Me : SocksClient | state: tunneling, socketName: SocketName, tunnelSocketName: NewSocketName, Att >
+    received(Me, NewSocketName, S)
+  =>
+    < Me : SocksClient | state: tunneling, socketName: SocketName, tunnelSocketName: NewSocketName, Att >
+    receive(NewSocketName, Me)
+    send(SocketName, Me, S)
+    .
+
+  crl [socks] :
+    < Me : SocksClient | state: tunneling, read: S, tunnelSocketName: NewSocketName, Att >  
+  =>
+    < Me : SocksClient | state: tunneling, read: "", tunnelSocketName: NewSocketName, Att >
+    send(NewSocketName, Me, S)
+  if
+    length(S) > 0
+    .
+
+  rl [socks] :
+    < Me : SocksClient | state: tunneling, tunnelSocketName: NewSocketName, Att >  
+    closedSocket(Me, NewSocketName, S)
+  =>
+    < Me : SocksClient | state: shouldClose, tunnelSocketName: NewSocketName, Att >  
+    .
+
+endm
+
+eof

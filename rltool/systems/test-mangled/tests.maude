@@ -64,7 +64,7 @@ op portToBytes : Nat -> String .
 eq portToBytes(N) = char(N quo (2 ^ 8)) + char(N rem (2 ^ 8)) .
 --- end From SOCKS
 
-crl [createClientManager] :
+crl [tests] :
   { Config }
 =>
   {
@@ -75,7 +75,7 @@ if
   not clientManagerInConfig(Config)
   .
 
-rl [createClient] :
+rl [tests] :
   createClient(Port, Address, N')
   < CM : ClientManager | nextNumber: N, Att >
 =>
@@ -83,7 +83,7 @@ rl [createClient] :
   < CM : ClientManager | nextNumber: s(N), Att >
   .
 
-rl [receive] :
+rl [tests] :
   < Me : Client | socketName: SocketName, read: S, Att >
   received(Me, SocketName, S')
 =>
@@ -91,21 +91,21 @@ rl [receive] :
   receive(SocketName, Me)
   .
 
-rl [sent] :
+rl [tests] :
   < Me : Client | socketName: SocketName, Att >
   sent(Me, SocketName)
 =>
   < Me : Client | socketName: SocketName, Att >
   .
 
-rl [connectToServer] :
+rl [tests] :
   < Me : Client | state: initial, address: Address, port: Port, Att >
 =>
   createClientTcpSocket(socketManager, Me, "127.0.0.1", Port)
   < Me : Client | state: connecting, address: Address, port: Port, Att >
   .
 
-rl [connectedToServer] :
+rl [tests] :
   < Me : Client | state: connecting, Att >
   createdSocket(Me, socketManager, SocketName)
 =>
@@ -113,14 +113,14 @@ rl [connectedToServer] :
   receive(SocketName, Me)
   .
 
-rl [sendHeader] :
+rl [tests] :
   < Me : Client | state: sendingHeader, socketName: SocketName, Att >
 =>
   send(SocketName, Me, char(5) + char(1) + char(0))
   < Me : Client | state: readingMethod, socketName: SocketName, Att >
   .
 
-crl [readMethod] :
+crl [tests] :
   < Me : Client | state: readingMethod, socketName: SocketName, read: S, Att >
 =>
   < Me : Client | state: sendingRequest, socketName: SocketName, read: Rest, Att >
@@ -129,14 +129,14 @@ if
   Rest := substr(S, 2, length(S))
   .
 
-rl [sendRequest] :
+rl [tests] :
   < Me : Client | state: sendingRequest, socketName: SocketName, address: Address, port: Port, Att >
 =>
   send(SocketName, Me, char(5) + char(1) + char(0) + char(1) + addressToBytes(Address, 1) + portToBytes(80))
   < Me : Client | state: readingRequestReply, socketName: SocketName, address: Address, port: Port, Att >
   .
 
-crl [readRequestReply] :
+crl [tests] :
   < Me : Client | state: readingRequestReply, socketName: SocketName, read: S, Att >
 =>
   < Me : Client | state: sendingWebsiteMsg, socketName: SocketName, read: Rest, Att >
@@ -145,7 +145,7 @@ if
   Rest := substr(S, 10, length(S))
   .
 
-rl [sendWebsiteMsg] : 
+rl [tests] : 
   < Me : Client | state: sendingWebsiteMsg, socketName: SocketName, Att >
 =>
   send(SocketName, Me, "hello")
@@ -186,21 +186,21 @@ op newUrlAction : -> Msg [ctor] .
 
 op inspect : Nat -> Configuration .
 
-rl [a] : inspect(0) => createUI .
-crl [b] : inspect(N) => newUrlAction inspect(N - 1) if N > 0 .
-crl [c]: inspect(N) => switchTabAction inspect(N - 1) if N > 0 .
+rl [tests] : inspect(0) => createUI .
+crl [tests] : inspect(N) => newUrlAction inspect(N - 1) if N > 0 .
+crl [tests]: inspect(N) => switchTabAction inspect(N - 1) if N > 0 .
 
 op urlFromNat : Nat -> String .
 eq urlFromNat(N) = "0.0.0." + string(N, 10) .
 
-rl [createUI] : 
+rl [tests] : 
   createUI 
 => 
   < ui : UI | canTakeAction: false, startedClient: false, currentURL: 0, nextURL: 1, curAction: noAction >
   createServerTcpSocket(socketManager, ui, 8080, 5)
   .
 
-rl [createdUISocket] :
+rl [tests] :
   createdSocket(ui, socketManager, Sock)
   < ui : UI | Att >
 =>
@@ -208,14 +208,14 @@ rl [createdUISocket] :
   acceptClient(Sock, ui)
   .
 
-rl [acceptedClient] :
+rl [tests] :
   acceptedClient(ui, Sock, "127.0.0.1", NewSock)
   < ui : UI | canTakeAction: false, Att >
 =>
   < ui : UI | ibosSocket: NewSock, canTakeAction: true, Att >
   .
 
-rl [newTabUI] :
+rl [tests] :
   < ui : UI | ibosSocket: Sock, canTakeAction: true, currentURL: N', nextURL: N, curAction: M, Att >
   newUrlAction
 =>
@@ -223,7 +223,7 @@ rl [newTabUI] :
   send(Sock, ui, "MSG-NEW-URL|" + urlFromNat(N) + "|" + urlFromNat(N) + "#")
   .
 
-crl [startClient] :
+crl [tests] :
   < ui : UI | canTakeAction: false, startedClient: false, currentURL: N, curAction: newUrlAction, Att >
   < display | displayedContent(url(S, S)), Att' >
 =>
@@ -235,7 +235,7 @@ if
   S == urlFromNat(N)
   .
 
-crl [allowActionNewURL] :
+crl [tests] :
   < ui : UI | canTakeAction: false, startedClient: true, currentURL: N, curAction: newUrlAction, Att >
   < Me : Client | forURL: N, state: readingWebsiteMsg, read: S, Att' >
 =>
@@ -245,7 +245,7 @@ if
   S == urlFromNat(N) + ":80#"
   .
 
-crl [switchTabUI] :
+crl [tests] :
   < ui : UI | ibosSocket: Sock, canTakeAction: true, currentURL: N', nextURL: N, curAction: M, hasTab: N'', Att >
   switchTabAction
 =>
@@ -255,7 +255,7 @@ if
   N'' =/= N'
   .
 
-crl [allowActionSwitchTab] :
+crl [tests] :
   < ui : UI | canTakeAction: false, currentURL: N, curAction: switchTabAction, Att >
   < display | displayedContent(url(S, S)), Att' >
 =>
@@ -337,7 +337,7 @@ eq IABC({Config}) = true [owise] .
 
 op startTest : Nat -> Configuration [ctor] .
 
-rl [startTest] :
+rl [tests] :
   { startTest(N) }
 =>
   {
