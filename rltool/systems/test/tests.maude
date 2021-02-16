@@ -261,10 +261,12 @@ if
 
 ***(
 --- Only fails with depth >= 4
-rl [havoc] :
+crl [havoc] :
   < ui : UI | currentURL: (N:Nat), hasTab: (N1:Nat), hasTab: (N2:Nat), hasTab: (N3:Nat), hasTab: (N4:Nat), Att >
 =>
   < ui : UI | currentURL: 1, hasTab: (N1:Nat), hasTab: (N2:Nat), hasTab: (N3:Nat), hasTab: (N4:Nat), Att >
+if
+  N > 1
   .
 )
 
@@ -322,10 +324,9 @@ op IABC : State -> Bool .
 eq IABC(
   {
     < ui : UI | currentURL: N, curAction: noAction, Att >
-    < Me : Client | address: Address, port: Port, forURL: N, read: S, Att' >
     < kernel | displayedTopBar(url(L, L')), Att'' >
     Config
-  }) = (L == urlFromNat(N) and Address == urlFromNat(N)).
+  }) = L == urlFromNat(N).
 
 eq IABC({Config}) = true [owise] .
 --- End invariants

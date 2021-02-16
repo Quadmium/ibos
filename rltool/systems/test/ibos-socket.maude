@@ -731,12 +731,12 @@ mod KERNEL is
        Cnf } .
 
   **** no policy allowed this, therefore implicitly disallowed and dropped
-  rl [kernelReceivesOPMessage-pa10] :
-     { < kernel | handledCurrently(none), msgPolicy(MP),  Att  >
-       < PPI1   | toKernel(msg(ORG, GPPI, MT, L) @ ML),   Att2 > Cnf }
-  =>
-     { < kernel | handledCurrently(none), msgPolicy(MP), Att  >
-       < PPI1   | toKernel(ML),                          Att2 > Cnf } .
+  ***rl [kernelReceivesOPMessage-pa10] :
+  ***   { < kernel | handledCurrently(none), msgPolicy(MP),  Att  >
+  ***     < PPI1   | toKernel(msg(ORG, GPPI, MT, L) @ ML),   Att2 > Cnf }
+  ***=>
+  ***   { < kernel | handledCurrently(none), msgPolicy(MP), Att  >
+  ***     < PPI1   | toKernel(ML),                          Att2 > Cnf } .
 
   **** Made into a topmost rule from module KERNEL-POLICIES
   crl [kernelForwardsOPMessage] :
