@@ -1,0 +1,15 @@
+--- Example:
+---     search {startTest(4)} =>* (X:State) s.t. not IABC(X:State) using all_files_havoc .
+
+
+smod MOD_CHECK is 
+    pr SOCKS .
+    pr KERNEL .
+    pr SOCKET .
+    pr CLIENT .
+    pr UI .
+    pr TEST .
+
+    strat all_files_havoc @ State .
+    sd all_files_havoc := ((havoc) | ((testfile)! ; (socksfile)! ; (socketfile)! ; (ibosfile)!))* ; not(testfile) ; not(socksfile) ; not(socketfile) ; not(ibosfile) .
+endsm
