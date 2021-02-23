@@ -1,0 +1,294 @@
+load socks.maude
+load ibos-socket.maude
+
+mod CLIENT is
+pr CONFIGURATION .
+pr SOCKS .
+
+vars N N' N'' N''' Port : Nat .
+vars Address S S' Rest : String .
+vars Config : Configuration .
+vars Me CM SocketName : Oid .
+vars Att : AttributeSet .
+
+op createClient : String Nat -> Msg [ctor msg] .
+
+op client : Nat -> Oid [ctor] .
+op Client : -> Cid [ctor] .
+
+op clientManager : -> Oid [ctor] .
+op ClientManager : -> Cid [ctor] .
+
+op nextNumber:_ : Nat -> Attribute [ctor] .
+
+sort ClientState .
+ops initial connecting sendingWebsiteMsg readingWebsiteMsg : -> ClientState [ctor] .
+
+op state:_ : ClientState -> Attribute [ctor] .
+op address:_ : String -> Attribute [ctor] .
+op port:_ : Nat -> Attribute [ctor] .
+op socketName:_ : Oid -> Attribute [ctor] .
+op read:_ : String -> Attribute [ctor] .
+
+op clientManagerInConfig : Configuration -> Bool .
+eq clientManagerInConfig(< CM : ClientManager | Att > Config) = true .
+eq clientManagerInConfig(Config) = false [owise] .
+
+crl [createClientManager] :
+  { <> Config }
+=>
+  {
+    <>
+    Config
+    < clientManager : ClientManager | nextNumber: 0 >
+  }
+if
+  not clientManagerInConfig(Config)
+  .
+
+rl [createClient] :
+  createClient(Address, Port)
+  < CM : ClientManager | nextNumber: N, Att >
+=>
+  < client(N) : Client | state: initial, address: Address, port: Port, read: "" >
+  < CM : ClientManager | nextNumber: s(N), Att >
+  .
+
+rl [receive] :
+  < Me : Client | socketName: SocketName, read: S, Att >
+  received(Me, SocketName, S')
+=>
+  < Me : Client | socketName: SocketName, read: (S + S'), Att >
+  receive(SocketName, Me)
+  .
+
+rl [sent] :
+  < Me : Client | socketName: SocketName, Att >
+  sent(Me, SocketName)
+=>
+  < Me : Client | socketName: SocketName, Att >
+  .
+
+rl [connectToServer] :
+  < Me : Client | state: initial, address: Address, port: Port, Att >
+=>
+  createClientTcpSocket(socketManager, Me, Address, Port)
+  < Me : Client | state: connecting, address: Address, port: Port, Att >
+  .
+
+rl [connectedToServer] :
+  < Me : Client | state: connecting, Att >
+  createdSocket(Me, socketManager, SocketName)
+=>
+  < Me : Client | state: sendingWebsiteMsg, socketName: SocketName, Att >
+  receive(SocketName, Me)
+  .
+
+rl [sendWebsiteMsg] : 
+  < Me : Client | state: sendingWebsiteMsg, socketName: SocketName, Att >
+=>
+  send(SocketName, Me, "hello")
+  < Me : Client | state: readingWebsiteMsg, socketName: SocketName, Att >
+  .
+
+endm
+
+
+mod PROXYWRAPPER is
+pr CLIENT .
+
+vars Att : AttributeSet .
+vars Config : Configuration .
+vars SM Client Socket NewSocket SocketName Me : Oid .
+vars Address : String .
+vars Port : Nat .
+vars S S' Rest : String .
+vars N N' N'' N''' : Nat .
+
+op proxyWrapper : -> Oid .
+op ProxyWrapper : -> Cid .
+op createdServerForClient:_ : Bool -> Attribute [ctor] .
+op address:_ : String -> Attribute [ctor] .
+op port:_ : Nat -> Attribute [ctor] .
+op wstate:_ : WrapperState -> Attribute [ctor]  .
+op socketName:_ : Oid -> Attribute [ctor] .
+op socketNameInClientWorld:_ : Oid -> Attribute [ctor] .
+op read:_ : String -> Attribute [ctor] .
+
+sort WrapperState .
+ops initial connecting sendingHeader readingMethod sendingRequest readingRequestReply sendingWebsiteMsg readingWebsiteMsg : -> WrapperState [ctor] .
+
+op clientWorld:_ : State -> Attribute [ctor] .
+op serverForClient : -> Oid .
+
+--- From SOCKS maude
+op findNth : String String Nat Nat -> FindResult .
+eq findNth(S, S', N, 0) = find(S, S', N) .
+ceq findNth(S, S', N, N') = findNth(S, S', find(S, S', N) + 1, N' - 1) if N' =/= 0 .
+
+op addressToBytes : String Nat -> String .
+--- String address has type 3
+eq addressToBytes(S, 3) = char(length(S)) + S .
+--- IPV4 address has type 1
+ceq addressToBytes(S, 1) = 
+  char(N) + char(N') + char(N'') + char(N''')
+if
+  N := rat(substr(S, 0, findNth(S, ".", 0, 0)), 10) /\
+  N' := rat(substr(S, findNth(S, ".", 0, 0) + 1, find(substr(S, findNth(S, ".", 0, 0) + 1, length(S)), ".", 0)), 10) /\
+  N'' := rat(substr(S, findNth(S, ".", 0, 1) + 1, find(substr(S, findNth(S, ".", 0, 1) + 1, length(S)), ".", 0)), 10) /\
+  N''' := rat(substr(S, findNth(S, ".", 0, 2) + 1, length(S)), 10)
+  .
+
+op portToBytes : Nat -> String .
+eq portToBytes(N) = char(N quo (2 ^ 8)) + char(N rem (2 ^ 8)) .
+--- end From SOCKS
+
+op start : -> Configuration [ctor] .
+
+rl [test] :
+  { start }
+=>
+  {
+    <>
+    createSocksServer(20, "172.172.172.142")
+    < proxyWrapper : ProxyWrapper | clientWorld: {<> createClient("172.172.172.142", 91)}, createdServerForClient: false >
+  }
+  .
+
+rl [seeCreateClient] :
+  < proxyWrapper : ProxyWrapper | createdServerForClient: false, clientWorld: {
+    Config
+    createClientTcpSocket(SM, Client, Address, Port)
+  } >
+=> 
+  < proxyWrapper : ProxyWrapper | createdServerForClient: true, address: Address, port: Port, clientWorld: {
+    Config
+    createServerTcpSocket(SM, serverForClient, Port, 5)
+
+    createClientTcpSocket(SM, Client, "127.0.0.1", Port)
+  } >
+  .
+
+rl [serverForClientCreated] :
+  < proxyWrapper : ProxyWrapper | clientWorld: {
+    Config
+    createdSocket(serverForClient, SM, Socket)
+  }, Att >
+=>
+  < proxyWrapper : ProxyWrapper | clientWorld: {
+    Config
+    acceptClient(Socket, serverForClient)
+  }, Att >
+  .
+
+rl [clientConnectedInternalServer] :
+  < proxyWrapper : ProxyWrapper | clientWorld: {
+    Config
+    acceptedClient(serverForClient, Socket, "127.0.0.1", NewSocket)
+  }, Att >
+=>
+  < proxyWrapper : ProxyWrapper | wstate: initial, socketNameInClientWorld: NewSocket, clientWorld: {
+    Config
+    receive(NewSocket, proxyWrapper)
+  }, Att >
+  .
+
+rl [connectToServer] :
+  < Me : ProxyWrapper | wstate: initial, address: Address, port: Port, Att >
+=>
+  createClientTcpSocket(socketManager, Me, "127.0.0.1", 20)
+  < Me : ProxyWrapper | wstate: connecting, address: Address, port: Port, Att >
+  .
+
+rl [connectedToServer] :
+  < Me : ProxyWrapper | wstate: connecting, Att >
+  createdSocket(Me, socketManager, SocketName)
+=>
+  < Me : ProxyWrapper | wstate: sendingHeader, socketName: SocketName, read: "", Att >
+  receive(SocketName, Me)
+  .
+
+rl [receive] :
+  < Me : ProxyWrapper | socketName: SocketName, read: S, Att >
+  received(Me, SocketName, S')
+=>
+  < Me : ProxyWrapper | socketName: SocketName, read: (S + S'), Att >
+  receive(SocketName, Me)
+  .
+
+rl [sent] :
+  < Me : ProxyWrapper | socketName: SocketName, Att >
+  sent(Me, SocketName)
+=>
+  < Me : ProxyWrapper | socketName: SocketName, Att >
+  .
+
+rl [sendHeader] :
+  < Me : ProxyWrapper | wstate: sendingHeader, socketName: SocketName, Att >
+=>
+  send(SocketName, Me, char(5) + char(1) + char(0))
+  < Me : ProxyWrapper | wstate: readingMethod, socketName: SocketName, Att >
+  .
+  
+crl [readMethod] :
+  < Me : ProxyWrapper | wstate: readingMethod, socketName: SocketName, read: S, Att >
+=>
+  < Me : ProxyWrapper | wstate: sendingRequest, socketName: SocketName, read: Rest, Att >
+if
+  length(S) >= 2 /\
+  Rest := substr(S, 2, length(S))
+  .
+
+rl [sendRequest] :
+  < Me : ProxyWrapper | wstate: sendingRequest, socketName: SocketName, address: Address, port: Port, Att >
+=>
+  send(SocketName, Me, char(5) + char(1) + char(0) + char(1) + addressToBytes(Address, 1) + portToBytes(Port))
+  < Me : ProxyWrapper | wstate: readingRequestReply, socketName: SocketName, address: Address, port: Port, Att >
+  .
+
+crl [readRequestReply] :
+  < Me : ProxyWrapper | wstate: readingRequestReply, socketName: SocketName, read: S, Att >
+=>
+  < Me : ProxyWrapper | wstate: sendingWebsiteMsg, socketName: SocketName, read: Rest, Att >
+if
+  length(S) >= 10 /\
+  Rest := substr(S, 10, length(S))
+  .
+
+rl [receiveInClientWorld] :
+  < Me : ProxyWrapper | wstate: sendingWebsiteMsg, socketNameInClientWorld: Socket, socketName: NewSocket, clientWorld: {
+    Config
+    received(Me, Socket, S)
+  }, Att >
+=>
+  < Me : ProxyWrapper | wstate: sendingWebsiteMsg, socketNameInClientWorld: Socket, socketName: NewSocket, clientWorld: {
+    Config
+    receive(Socket, Me)
+  }, Att >
+  send(NewSocket, Me, S)
+  .
+
+rl [sentInClientWorld] :
+  < Me : ProxyWrapper | wstate: sendingWebsiteMsg, socketNameInClientWorld: Socket, clientWorld: {
+    Config
+    sent(Me, Socket)
+  }, Att >
+=>
+  < Me : ProxyWrapper | wstate: sendingWebsiteMsg, socketNameInClientWorld: Socket, clientWorld: {
+    Config
+  }, Att >
+  .
+
+crl [passBackToClientWorld] :
+  < Me : ProxyWrapper | wstate: sendingWebsiteMsg, socketNameInClientWorld: Socket, read: S, clientWorld: {
+    Config
+  }, Att >
+=>
+  < Me : ProxyWrapper | wstate: sendingWebsiteMsg, socketNameInClientWorld: Socket, read: "", clientWorld: {
+    Config
+    send(Socket, Me, S)
+  }, Att >
+if
+  length(S) > 0
+  .
+endm
