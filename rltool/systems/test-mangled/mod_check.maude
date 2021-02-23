@@ -1,0 +1,33 @@
+load socks.maude
+load tests.maude
+load client.maude
+
+smod MOD_CHECK is 
+    pr SOCKS .
+    pr KERNEL .
+    pr SOCKET .
+    pr CLIENT .
+    pr UI .
+    pr TEST .
+
+    strat components @ State .
+    sd components :=  (((client)! ; (socks)! ; (socket_mock)! ; (ibos-socket)!)* ; 
+                                    not(client) ; not(socks) ; not(socket_mock) ; not(ibos-socket)) .
+
+    strat interleaved_components @ State .
+    sd interleaved_components := ((client) | (socks) | (socket_mock) | (ibos-socket))! .
+
+    --- strat not_each_file_once @ State .
+    --- sd not_each_file_once := not(client) ; not(socks) ; not(socket_mock) ; not(ibos-socket) .
+
+    strat all_interleaved_havoc @ State .
+    sd all_interleaved_havoc := (havoc-keep | 
+                            ((allowNextAction-keep)! ; (tests)! ; 
+                                interleaved_components))* ; 
+                                        not(allowNextAction-keep) ; not(tests) .
+
+    strat all_havoc @ State .
+    sd all_havoc := (havoc-keep | 
+                            ((allowNextAction-keep)! ; (tests)! ; components))* ; 
+                                        not(allowNextAction-keep) ; not(tests) .
+endsm
