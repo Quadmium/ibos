@@ -1,14 +1,14 @@
 ***(
 
-search {startTest(4)} =>* (X:State) s.t. not IABC(X:State) using (havoc-keep | ((allowNextAction-keep)! ; (tests)! ; (((client)! ; (socks)! ; (socket_mock)! ; (ibos-socket)!)* ; not(client) ; not(socks) ; not(socket_mock) ; not(ibos-socket))))* ; not(allowNextAction-keep) ; not(tests) .
+search {startTest(4)} =>* (X:State) s.t. not IABC(X:State) using (havoc-keep | ((allowNextAction-keep)! ; (tests)! ; (((client_isolated)! ; (socks)! ; (socket_mock)! ; (ibos-socket)!)* ; not(client_isolated) ; not(socks) ; not(socket_mock) ; not(ibos-socket))))* ; not(allowNextAction-keep) ; not(tests) .
 
 )
 
-load client.maude
+load client_isolated.maude
 
 mod UI is
 pr CONFIGURATION .
-pr CLIENT .
+pr PROXYWRAPPER .
 pr IBOS-EXTEND .
 
 op UI : -> Cid .
@@ -70,7 +70,7 @@ rl [tests] :
   < ui : UI | ibosSocket: Sock, currentURL: N', nextURL: N, curAction: noAction, Att >
   newUrlAction
 =>
-  createClient(8080 + N, urlFromNat(N), N)
+  createProxyClient("127.0.0.1", 8080 + N, urlFromNat(N), 80, urlFromNat(N))
   < ui : UI | ibosSocket: Sock, currentURL: N, nextURL: s(N), curAction: newUrlAction, hasTab: N, Att >
   send(Sock, ui, "MSG-NEW-URL|" + urlFromNat(N) + "|" + urlFromNat(N) + "#")
   .
@@ -111,9 +111,9 @@ pr CLIENT .
 pr UI .
 pr IBOS-EXTEND .
 
-vars S S' Delim Data Address Rest : String .
+vars S S' Delim Data Address Address' Rest : String .
 vars N Port : Nat .
-vars Me : Oid .
+vars Me Me' : Oid .
 vars Att Att' Att'' : AttributeSet .
 
 op untilDelim : String String -> String .
@@ -138,18 +138,31 @@ if
   length(S) > 0
   . 
 
-vars Config : Configuration .
+vars Config Config' : Configuration .
 vars L L' : String .
 
 --- Invariants for testing
 op ISOP : State -> Bool .
 
+--- Clients in real world (shouldn't run when proxied clients are used)
 eq ISOP(
   {
     < Me : Client | state: readingWebsiteMsg, address: Address, port: Port, read: S, Att >
     Config
   }) = isBufferFullOf(S,  Address + ":" + string(80, 10)) and ISOP({Config}) .
 
+--- Search all wrapped clients (will run when proxied clients used)
+--- Simpler client description because this client does not need to do proxy relay, so can check read buffer at any state (wont get intermediate proxy handshake flagged as SOP violation)
+eq ISOP(
+  {
+    < Me : ProxyWrapper | intendedAddress: Address, clientWorld: {
+      < Me' : Client | port: Port, read: S, Att' >
+      Config'
+    }, Att >
+    Config
+  }) = isBufferFullOf(S,  Address + ":" + string(Port, 10)) and ISOP({Config}) .
+
+--- No matches true by default
 eq ISOP({Config}) = true [owise] .
 
 op IABC : State -> Bool .

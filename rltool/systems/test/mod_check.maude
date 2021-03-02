@@ -1,24 +1,24 @@
 load socks.maude
 load tests.maude
-load client.maude
+load client_isolated.maude
 
 smod MOD_CHECK is 
     pr SOCKS .
     pr KERNEL .
     pr SOCKET .
-    pr CLIENT .
+    pr PROXYWRAPPER .
     pr UI .
     pr TEST .
 
     strat components @ State .
-    sd components :=  (((client)! ; (socks)! ; (socket_mock)! ; (ibos-socket)!)* ; 
-                                    not(client) ; not(socks) ; not(socket_mock) ; not(ibos-socket)) .
+    sd components :=  (((client_isolated)! ; (socks)! ; (socket_mock)! ; (ibos-socket)!)* ; 
+                                    not(client_isolated) ; not(socks) ; not(socket_mock) ; not(ibos-socket)) .
 
     strat interleaved_components @ State .
-    sd interleaved_components := ((client) | (socks) | (socket_mock) | (ibos-socket))! .
+    sd interleaved_components := ((client_isolated) | (socks) | (socket_mock) | (ibos-socket))! .
 
     --- strat not_each_file_once @ State .
-    --- sd not_each_file_once := not(client) ; not(socks) ; not(socket_mock) ; not(ibos-socket) .
+    --- sd not_each_file_once := not(client_isolated) ; not(socks) ; not(socket_mock) ; not(ibos-socket) .
 
     strat all_interleaved_havoc @ State .
     sd all_interleaved_havoc := (havoc-keep | 

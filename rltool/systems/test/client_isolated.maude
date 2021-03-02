@@ -99,17 +99,21 @@ pr CLIENT .
 
 vars Att : AttributeSet .
 vars Config : Configuration .
-vars SM Client Socket NewSocket SocketName Me : Oid .
-vars Address : String .
-vars Port : Nat .
+vars SM Client Socket NewSocket SocketName Me CM : Oid .
+vars Address Address' Address'' : String .
+vars Port Port' : Nat .
 vars S S' Rest : String .
 vars N N' N'' N''' : Nat .
 
-op proxyWrapper : -> Oid .
+op proxyWrapper : Nat -> Oid .
 op ProxyWrapper : -> Cid .
+
 op createdServerForClient:_ : Bool -> Attribute [ctor] .
 op address:_ : String -> Attribute [ctor] .
 op port:_ : Nat -> Attribute [ctor] .
+op proxyAddress:_ : String -> Attribute [ctor] .
+op proxyPort:_ : Nat -> Attribute [ctor] .
+op intendedAddress:_ : String -> Attribute [ctor] .
 op wstate:_ : WrapperState -> Attribute [ctor]  .
 op socketName:_ : Oid -> Attribute [ctor] .
 op socketNameInClientWorld:_ : Oid -> Attribute [ctor] .
@@ -143,61 +147,96 @@ op portToBytes : Nat -> String .
 eq portToBytes(N) = char(N quo (2 ^ 8)) + char(N rem (2 ^ 8)) .
 --- end From SOCKS
 
-op start : -> Configuration [ctor] .
+op proxyClientManager : -> Oid [ctor] .
+op ProxyClientManager : -> Cid [ctor] .
 
-rl [test] :
-  { start }
+op nextNumber:_ : Nat -> Attribute [ctor] .
+
+op proxyClientManagerInConfig : Configuration -> Bool .
+eq proxyClientManagerInConfig(< CM : ProxyClientManager | Att > Config) = true .
+eq proxyClientManagerInConfig(Config) = false [owise] .
+
+--- Socks proxy address, port, client target address, port, intended address (for whitelist)
+op createProxyClient : String Nat String Nat String -> Msg [ctor msg] .
+
+crl [createProxyClientManager] :
+  { <> Config }
 =>
   {
     <>
-    createSocksServer(20, "172.172.172.142")
-    < proxyWrapper : ProxyWrapper | clientWorld: {<> createClient("172.172.172.142", 91)}, createdServerForClient: false >
+    Config
+    < proxyClientManager : ProxyClientManager | nextNumber: 0 >
+  }
+if
+  not proxyClientManagerInConfig(Config)
+  .
+
+op start : -> Configuration [ctor] .
+
+rl [start] : { start } => {
+  <>
+  createSocksServer(20, "172.172.172.142")
+  createProxyClient("127.0.0.1", 20, "172.172.172.142", 91, "172.172.172.142")
+}
+.
+
+rl [createProxyClient] :
+  { 
+    Config
+    createProxyClient(Address, Port, Address', Port', Address'')
+    < proxyClientManager : ProxyClientManager | nextNumber: N >
+  }
+=>
+  {
+    Config
+    < proxyWrapper(N) : ProxyWrapper | clientWorld: {<> createClient(Address', Port')}, proxyAddress: Address, proxyPort: Port, intendedAddress: Address'', createdServerForClient: false >
+    < proxyClientManager : ProxyClientManager | nextNumber: s(N) >
   }
   .
 
 rl [seeCreateClient] :
-  < proxyWrapper : ProxyWrapper | createdServerForClient: false, clientWorld: {
+  < Me : ProxyWrapper | createdServerForClient: false, clientWorld: {
     Config
     createClientTcpSocket(SM, Client, Address, Port)
-  } >
+  }, Att >
 => 
-  < proxyWrapper : ProxyWrapper | createdServerForClient: true, address: Address, port: Port, clientWorld: {
+  < Me : ProxyWrapper | createdServerForClient: true, address: Address, port: Port, clientWorld: {
     Config
     createServerTcpSocket(SM, serverForClient, Port, 5)
 
     createClientTcpSocket(SM, Client, "127.0.0.1", Port)
-  } >
+  }, Att >
   .
 
 rl [serverForClientCreated] :
-  < proxyWrapper : ProxyWrapper | clientWorld: {
+  < Me : ProxyWrapper | clientWorld: {
     Config
     createdSocket(serverForClient, SM, Socket)
   }, Att >
 =>
-  < proxyWrapper : ProxyWrapper | clientWorld: {
+  < Me : ProxyWrapper | clientWorld: {
     Config
     acceptClient(Socket, serverForClient)
   }, Att >
   .
 
 rl [clientConnectedInternalServer] :
-  < proxyWrapper : ProxyWrapper | clientWorld: {
+  < Me : ProxyWrapper | clientWorld: {
     Config
     acceptedClient(serverForClient, Socket, "127.0.0.1", NewSocket)
   }, Att >
 =>
-  < proxyWrapper : ProxyWrapper | wstate: initial, socketNameInClientWorld: NewSocket, clientWorld: {
+  < Me : ProxyWrapper | wstate: initial, socketNameInClientWorld: NewSocket, clientWorld: {
     Config
-    receive(NewSocket, proxyWrapper)
+    receive(NewSocket, Me)
   }, Att >
   .
 
 rl [connectToServer] :
-  < Me : ProxyWrapper | wstate: initial, address: Address, port: Port, Att >
+  < Me : ProxyWrapper | wstate: initial, proxyAddress: Address, proxyPort: Port, Att >
 =>
-  createClientTcpSocket(socketManager, Me, "127.0.0.1", 20)
-  < Me : ProxyWrapper | wstate: connecting, address: Address, port: Port, Att >
+  createClientTcpSocket(socketManager, Me, Address, Port)
+  < Me : ProxyWrapper | wstate: connecting, proxyAddress: Address, proxyPort: Port, Att >
   .
 
 rl [connectedToServer] :
