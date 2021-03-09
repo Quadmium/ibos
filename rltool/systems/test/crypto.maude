@@ -1,0 +1,92 @@
+fmod CRYPTO_ANCESTOR is
+pr NAT .
+pr STRING .
+
+--- This corresponds to message contents, not who to where
+sort Payload .
+
+sort DecryptionResult .
+sort Error .
+subsorts Error Payload < DecryptionResult .
+
+op error : String -> Error [ctor] .
+endfm
+
+fmod SYMMETRIC is
+pr CRYPTO_ANCESTOR .
+
+sort SymKey .
+--- Nat could be counter or nonce
+op symKey : Nat -> SymKey [ctor] .
+
+op enc : Payload SymKey -> Payload [ctor] .
+
+op dec : Payload SymKey -> DecryptionResult [ctor] .
+
+vars P : Payload .
+vars K K' : SymKey .
+
+eq dec(enc(P, K), K) = P .
+eq dec(P, K) = error("Mismatched symmetric key OR unencrypted payload") [owise] .
+endfm
+
+fmod ASYMMETRIC is
+pr CRYPTO_ANCESTOR .
+
+sort PrivKey PubKey .
+op privKey : Nat -> PrivKey [ctor] .
+op pubKey : Nat -> PubKey [ctor] .
+
+--- In a pub key system we can enc with pub or priv
+--- These numbers will identify agents using this (processes, users, etc)
+--- Only owner has keypair, but public keys free to expose
+
+--- Could have (PubKey PrivKey < Key) here and distinguish them since they are subsorts
+--- Can add signing by making enc also work with private key
+op enc : Payload PubKey -> Payload [ctor] .
+op dec : Payload PrivKey -> DecryptionResult [ctor] .
+
+vars N : Nat .
+vars P : Payload .
+vars KPriv : PrivKey .
+vars KPub : PubKey .
+
+op flip : PubKey -> PrivKey .
+op flip : PrivKey -> PubKey .
+eq flip(pubKey(N)) = privKey(N) .
+eq flip(privKey(N)) = pubKey(N) .
+
+ceq dec(enc(P, KPub), KPriv) = P if KPriv == flip(KPub) .
+eq dec(P, KPriv) = error("Mismatched private key OR unencrypted payload") [owise] .
+
+endfm 
+
+mod CRYPTO is
+***(
+
+rew dec(enc(payload("hello"), symKey(1)), symKey(1)) == payload("hello") .
+rew dec(enc(payload("hello"), pubKey(1)), privKey(1)) == payload("hello") .
+
+)
+
+inc SYMMETRIC .
+inc ASYMMETRIC .
+
+subsort String < Payload .
+
+endm
+
+
+mod CRYPTO_OBJECTS is 
+pr CONFIGURATION .
+inc CRYPTO .
+
+vars O : Oid .
+
+op privKey : Oid -> PrivKey [ctor] .
+op pubKey : Oid -> PubKey [ctor] .
+
+eq flip(pubKey(O)) = privKey(O) .
+eq flip(privKey(O)) = pubKey(O) .
+
+endm
