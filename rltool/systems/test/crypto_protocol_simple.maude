@@ -18,15 +18,12 @@ op nonce : Oid Nat -> Nonce [ctor] .
 sorts Sessions InitSessions .
 subsort Sessions < InitSessions .
 op emptySession : -> Sessions [ctor] .
-op __ : InitSessions InitSessions -> InitSessions [ctor assoc comm id: emptySession] .
-op __ : Sessions Sessions -> Sessions [ctor assoc comm id: emptySession] .
 op notInitiated : Oid -> InitSessions [ctor] .
 op initiated : Oid Nonce -> InitSessions [ctor] .
 op trustedConnection : Oid -> Sessions [ctor] .
 
 sort RespSessions .
 subsort Sessions < RespSessions .
-op _ _ : RespSessions RespSessions -> RespSessions [ctor assoc comm id: emptySession] .
 op responded : Oid Nonce -> RespSessions [ctor] .
 
 op Agent : -> Cid [ctor] .
@@ -35,50 +32,41 @@ op initSessions:_ : InitSessions -> Attribute [ctor] .
 op respSessions:_ : RespSessions -> Attribute [ctor] .
 
 vars A B I : Oid .
-vars IS : InitSessions .
-vars RS : RespSessions .
 vars N : Nat .
 vars Att : AttributeSet .
 vars Nonce Nonce' : Nonce .
 vars PL : Payload .
 
-op _inSession_ : Oid RespSessions -> Bool .
-eq A inSession (responded(A, Nonce) RS) = true .
-eq A inSession (trustedConnection(A) RS) = true .
-eq A inSession RS = false [owise] .
-
 --- Initiate
 rl [send-1] :
-  < A : Agent | initSessions: (notInitiated(B) IS), nextNonce: N, Att >
+  < A : Agent | initSessions: (notInitiated(B)), nextNonce: N, Att >
 =>
-  < A : Agent | initSessions: (initiated(B, nonce(A, N)) IS), nextNonce: s(N), Att >
+  < A : Agent | initSessions: (initiated(B, nonce(A, N))), nextNonce: s(N), Att >
   (msg enc(nonce(A, N) ; A, pubKey(B)) from A to B)
   .
 
 rl [read-2-send-3] :
   (msg enc(Nonce ; Nonce', pubKey(A)) from B to A)
-  < A : Agent | initSessions: (initiated(B, Nonce) IS), Att >
+  < A : Agent | initSessions: (initiated(B, Nonce)), Att >
 =>
-  < A : Agent | initSessions: (trustedConnection(B) IS), Att >
+  < A : Agent | initSessions: (trustedConnection(B)), Att >
   (msg enc(Nonce', pubKey(B)) from A to B)
   .
 
 --- Respond
-crl [read-1-send-2] :
+rl [read-1-send-2] :
   (msg enc(Nonce ; A, pubKey(B)) from A to B)
-  < B : Agent | respSessions: RS, nextNonce: N, Att >
+  < B : Agent | respSessions: emptySession, nextNonce: N, Att >
 =>
-  < B : Agent | respSessions: (responded(A, nonce(B, N)) RS), nextNonce: s(N), Att >
+  < B : Agent | respSessions: (responded(A, nonce(B, N))), nextNonce: s(N), Att >
   (msg enc(Nonce ; nonce(B, N), pubKey(A)) from B to A)
-if
-  not A inSession RS
   .
 
 rl [read-3] :
   (msg enc(Nonce, pubKey(B)) from A to B)
-  < B : Agent | respSessions: (responded(A, Nonce) RS), Att >
+  < B : Agent | respSessions: (responded(A, Nonce)), Att >
 =>
-  < B : Agent | respSessions: (trustedConnection(A) RS), Att >
+  < B : Agent | respSessions: (trustedConnection(A)), Att >
   .
 
 
@@ -113,37 +101,35 @@ vars PS : PayloadSet .
 --- Normal interactions
 --- Initiate
 rl [attacker-send-1] :
-  < A : Attacker | initSessions: (notInitiated(B) IS), nextNonce: N, agentsSeen: OS, noncesSeen: NS, Att >
+  < A : Attacker | initSessions: (notInitiated(B)), nextNonce: N, agentsSeen: OS, noncesSeen: NS, Att >
 =>
-  < A : Attacker | initSessions: (initiated(B, nonce(A, N)) IS), nextNonce: s(N), agentsSeen: (B o OS), noncesSeen: (nonce(A, N) n NS), Att >
+  < A : Attacker | initSessions: (initiated(B, nonce(A, N))), nextNonce: s(N), agentsSeen: (B o OS), noncesSeen: (nonce(A, N) n NS), Att >
   (msg enc(nonce(A, N) ; A, pubKey(B)) from A to B)
   .
 
 rl [attacker-read-2-send-3] :
   (msg enc(Nonce ; Nonce', pubKey(A)) from B to A)
-  < A : Attacker | initSessions: (initiated(B, Nonce) IS), noncesSeen: NS, Att >
+  < A : Attacker | initSessions: (initiated(B, Nonce)), noncesSeen: NS, Att >
 =>
-  < A : Attacker | initSessions: (trustedConnection(B) IS), noncesSeen: (Nonce' n NS), Att >
+  < A : Attacker | initSessions: (trustedConnection(B)), noncesSeen: (Nonce' n NS), Att >
   (msg enc(Nonce', pubKey(B)) from A to B)
   .
 
 --- Respond
 --- Change to Na ; Nb ; B to fix exploit
-crl [attacker-read-1-send-2] :
+rl [attacker-read-1-send-2] :
   (msg enc(Nonce ; A, pubKey(B)) from A to B)
-  < B : Attacker | respSessions: RS, nextNonce: N, agentsSeen: OS, noncesSeen: NS, Att >
+  < B : Attacker | respSessions: emptySession, nextNonce: N, agentsSeen: OS, noncesSeen: NS, Att >
 =>
-  < B : Attacker | respSessions: (responded(A, nonce(B, N)) RS), nextNonce: s(N), agentsSeen: (A o OS), noncesSeen: (Nonce n nonce(B, N) n NS), Att >
+  < B : Attacker | respSessions: (responded(A, nonce(B, N))), nextNonce: s(N), agentsSeen: (A o OS), noncesSeen: (Nonce n nonce(B, N) n NS), Att >
   (msg enc(Nonce ; nonce(B, N), pubKey(A)) from B to A)
-if
-  not A inSession RS
   .
 
 rl [attacker-read-3] :
   (msg enc(Nonce, pubKey(B)) from A to B)
-  < B : Attacker | respSessions: (responded(A, Nonce) RS), Att >
+  < B : Attacker | respSessions: (responded(A, Nonce)), Att >
 =>
-  < B : Attacker | respSessions: (trustedConnection(A) RS), Att >
+  < B : Attacker | respSessions: (trustedConnection(A)), Att >
   .
 
 --- Attacker interactions
@@ -217,11 +203,11 @@ subsort String < Oid .
 
 op start : -> Configuration [ctor] .
 eq start = 
-  ---< "A" : Agent | nextNonce: 0, initSessions: notInitiated("B"), respSessions: emptySession >
-  ---< "B" : Agent | nextNonce: 0, initSessions: emptySession, respSessions: emptySession >
-  < "a" : Agent | initSessions: notInitiated("c"), respSessions: emptySession, nextNonce: 1 >
-  < "Bank" : Agent | respSessions: emptySession, nextNonce: 1 >
-  < "c" : Agent | initSessions: (notInitiated("Bank") notInitiated("a")), respSessions: emptySession, nextNonce: 1 >
+  < "A" : Agent | nextNonce: 0, initSessions: notInitiated("B"), respSessions: emptySession >
+  < "B" : Agent | nextNonce: 0, initSessions: emptySession, respSessions: emptySession >
+  ---< "a" : Agent | initSessions: notInitiated("c"), respSessions: emptySession, nextNonce: 1 >
+  ---< "Bank" : Agent | respSessions: emptySession, nextNonce: 1 >
+  ---< "c" : Agent | initSessions: (notInitiated("Bank") notInitiated("a")), respSessions: emptySession, nextNonce: 1 >
   .
 
 op attackerStart : -> Configuration [ctor] .
@@ -247,8 +233,9 @@ eq midStart =
 
   .
 
+
 ***(
-search [100] attackerStart =>* C:Configuration < "Bank" : Agent | respSessions: responded("Scrooge", N:Nonce), Att > .
+  search [100] attackerStart =>* C:Configuration < "Bank" : Agent | respSessions: responded("Scrooge", N:Nonce), Att > .
 
 Debug(6)> search [1] midStart =>* C:Configuration < "Bank" : Agent | respSessions: (trustedConnection("Scrooge") RS:RespSessions), Att > .
 search [1] in PROTOCOL : midStart =>* C:Configuration < "Bank" : Agent | Att,respSessions: (RS trustedConnection(
