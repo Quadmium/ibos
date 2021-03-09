@@ -323,6 +323,7 @@ rl [closeLocalSocket] :
 --- TODO: some of the behavior on socks.maude handles the website closing once reply is done, what do we want to do? Close immediately after sending a reply?
 --- (while local either party can close the socket)
 
+***(
 crl [sendLocalSocketNotExist] :
   send(socket(N), Me, S)
   < SM : SocketManager |
@@ -350,5 +351,6 @@ crl [receiveLocalSocketNotExist] :
 if
   not containsConnectionWith(N, CS)
   .
+)
 
 endm

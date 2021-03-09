@@ -1,0 +1,279 @@
+load crypto.maude
+
+mod PROTOCOL is
+pr CRYPTO_OBJECTS .
+
+sort MessageContent .
+op msg_from_to_ : MessageContent Oid Oid -> Msg [ctor message] .
+
+subsort Payload < MessageContent .
+
+op _;_ : Payload Payload -> Payload [ctor] .
+
+sort Nonce .
+subsort Nonce < Payload .
+op nonce : Oid Nat -> Nonce [ctor] .
+
+
+sorts Sessions InitSessions .
+subsort Sessions < InitSessions .
+op emptySession : -> Sessions [ctor] .
+op __ : InitSessions InitSessions -> InitSessions [ctor assoc comm id: emptySession] .
+op __ : Sessions Sessions -> Sessions [ctor assoc comm id: emptySession] .
+op notInitiated : Oid -> InitSessions [ctor] .
+op initiated : Oid Nonce -> InitSessions [ctor] .
+op trustedConnection : Oid -> Sessions [ctor] .
+
+sort RespSessions .
+subsort Sessions < RespSessions .
+op _ _ : RespSessions RespSessions -> RespSessions [ctor assoc comm id: emptySession] .
+op responded : Oid Nonce -> RespSessions [ctor] .
+
+op Agent : -> Cid [ctor] .
+op nextNonce:_ : Nat -> Attribute [ctor] .
+op initSessions:_ : InitSessions -> Attribute [ctor] .
+op respSessions:_ : RespSessions -> Attribute [ctor] .
+
+vars A B I : Oid .
+vars IS : InitSessions .
+vars RS : RespSessions .
+vars N : Nat .
+vars Att : AttributeSet .
+vars Nonce Nonce' : Nonce .
+vars PL : Payload .
+
+op _inSession_ : Oid RespSessions -> Bool .
+eq A inSession (responded(A, Nonce) RS) = true .
+eq A inSession (trustedConnection(A) RS) = true .
+eq A inSession RS = false [owise] .
+
+--- Initiate
+rl [crypto_protocol] :
+  < A : Agent | initSessions: (notInitiated(B) IS), nextNonce: N, Att >
+=>
+  < A : Agent | initSessions: (initiated(B, nonce(A, N)) IS), nextNonce: s(N), Att >
+  (msg enc(nonce(A, N) ; A, pubKey(B)) from A to B)
+  .
+
+rl [crypto_protocol] :
+  (msg enc(Nonce ; Nonce', pubKey(A)) from B to A)
+  < A : Agent | initSessions: (initiated(B, Nonce) IS), Att >
+=>
+  < A : Agent | initSessions: (trustedConnection(B) IS), Att >
+  (msg enc(Nonce', pubKey(B)) from A to B)
+  .
+
+--- Respond
+crl [crypto_protocol] :
+  (msg enc(Nonce ; A, pubKey(B)) from A to B)
+  < B : Agent | respSessions: RS, nextNonce: N, Att >
+=>
+  < B : Agent | respSessions: (responded(A, nonce(B, N)) RS), nextNonce: s(N), Att >
+  (msg enc(Nonce ; nonce(B, N), pubKey(A)) from B to A)
+if
+  not A inSession RS
+  .
+
+rl [crypto_protocol] :
+  (msg enc(Nonce, pubKey(B)) from A to B)
+  < B : Agent | respSessions: (responded(A, Nonce) RS), Att >
+=>
+  < B : Agent | respSessions: (trustedConnection(A) RS), Att >
+  .
+
+
+--- Attacker
+sort NonceSet .
+subsort Nonce < NonceSet .
+op emptyNonceSet : -> NonceSet [ctor] .
+op _ n _ : NonceSet NonceSet -> NonceSet [ctor assoc comm id: emptyNonceSet] .
+eq Nonce n Nonce = Nonce .
+
+sort OidSet .
+subsort Oid < OidSet .
+op emptyOidSet : -> OidSet [ctor] .
+op _ o _ : OidSet OidSet -> OidSet [ctor assoc comm id: emptyOidSet] .
+eq A o A = A .
+
+sort PayloadSet .
+subsort Payload < PayloadSet .
+op emptyPayloadSet : -> PayloadSet [ctor] .
+op _ p _ : PayloadSet PayloadSet -> PayloadSet [ctor assoc comm id: emptyPayloadSet] .
+eq PL p PL = PL .
+
+op Attacker : -> Cid .
+op agentsSeen:_ : OidSet -> Attribute .
+op noncesSeen:_ : NonceSet -> Attribute .
+op encrMsgsSeen:_ : PayloadSet -> Attribute .
+
+vars NS : NonceSet .
+vars OS : OidSet .
+vars PS : PayloadSet .
+
+--- Normal interactions
+--- Initiate
+rl [crypto_protocol] :
+  < A : Attacker | initSessions: (notInitiated(B) IS), nextNonce: N, agentsSeen: OS, noncesSeen: NS, Att >
+=>
+  < A : Attacker | initSessions: (initiated(B, nonce(A, N)) IS), nextNonce: s(N), agentsSeen: (B o OS), noncesSeen: (nonce(A, N) n NS), Att >
+  (msg enc(nonce(A, N) ; A, pubKey(B)) from A to B)
+  .
+
+rl [crypto_protocol] :
+  (msg enc(Nonce ; Nonce', pubKey(A)) from B to A)
+  < A : Attacker | initSessions: (initiated(B, Nonce) IS), noncesSeen: NS, Att >
+=>
+  < A : Attacker | initSessions: (trustedConnection(B) IS), noncesSeen: (Nonce' n NS), Att >
+  (msg enc(Nonce', pubKey(B)) from A to B)
+  .
+
+--- Respond
+--- Change to Na ; Nb ; B to fix exploit
+crl [crypto_protocol] :
+  (msg enc(Nonce ; A, pubKey(B)) from A to B)
+  < B : Attacker | respSessions: RS, nextNonce: N, agentsSeen: OS, noncesSeen: NS, Att >
+=>
+  < B : Attacker | respSessions: (responded(A, nonce(B, N)) RS), nextNonce: s(N), agentsSeen: (A o OS), noncesSeen: (Nonce n nonce(B, N) n NS), Att >
+  (msg enc(Nonce ; nonce(B, N), pubKey(A)) from B to A)
+if
+  not A inSession RS
+  .
+
+rl [crypto_protocol] :
+  (msg enc(Nonce, pubKey(B)) from A to B)
+  < B : Attacker | respSessions: (responded(A, Nonce) RS), Att >
+=>
+  < B : Attacker | respSessions: (trustedConnection(A) RS), Att >
+  .
+
+--- Attacker interactions
+
+crl [crypto_protocol] :
+  (msg PL from A to B)
+  < I : Attacker | agentsSeen: OS, encrMsgsSeen: PS, Att >
+=>
+  < I : Attacker | agentsSeen: (A o B o OS), encrMsgsSeen: (PL p PS), Att >
+if
+  B =/= I .
+
+rl [crypto_protocol] :
+  (msg enc(Nonce ; A, pubKey(I)) from B to I)
+  < I : Attacker | agentsSeen: OS, noncesSeen: NS, Att >
+=>
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n NS), Att >
+.
+
+rl [crypto_protocol] :
+  (msg enc(Nonce ; Nonce', pubKey(I)) from B to I)
+  < I : Attacker | agentsSeen: OS, noncesSeen: NS, Att >
+=>
+  < I : Attacker | agentsSeen: (B o OS), noncesSeen: (Nonce n Nonce' n NS), Att >
+.
+
+rl [crypto_protocol] :
+  (msg enc(Nonce, pubKey(I)) from B to I)
+  < I : Attacker | agentsSeen: OS, noncesSeen: NS, Att >
+=>
+  < I : Attacker | agentsSeen: (B o OS), noncesSeen: (Nonce n NS), Att >
+.
+
+crl [crypto_protocol] :
+  < I : Attacker | agentsSeen: (A o OS), encrMsgsSeen: (enc(PL, pubKey(B)) p PS), Att >
+=>
+  < I : Attacker | agentsSeen: (A o OS), encrMsgsSeen: (enc(PL, pubKey(B)) p PS), Att >
+  (msg enc(PL, pubKey(B)) from A to B)
+if
+  A =/= B /\ B =/= I
+  .
+
+crl [crypto_protocol] :
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n NS), Att >
+=>
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n NS), Att >
+  (msg enc(Nonce ; A, pubKey(B)) from A to B)
+if
+  A =/= B /\ B =/= I
+  .
+
+crl [crypto_protocol] :
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n Nonce' n NS), Att >
+=>
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n Nonce' n NS), Att >
+  (msg enc(Nonce ; Nonce', pubKey(A)) from B to A)
+if
+  A =/= B /\ A =/= I
+  .
+
+crl [crypto_protocol] :
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n NS), Att >
+=>
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n NS), Att >
+  (msg enc(Nonce, pubKey(B)) from A to B)
+if
+  A =/= B /\ B =/= I
+  .
+
+subsort String < Oid .
+
+op start : -> Configuration [ctor] .
+eq start = 
+  ---< "A" : Agent | nextNonce: 0, initSessions: notInitiated("B"), respSessions: emptySession >
+  ---< "B" : Agent | nextNonce: 0, initSessions: emptySession, respSessions: emptySession >
+  < "a" : Agent | initSessions: notInitiated("c"), respSessions: emptySession, nextNonce: 1 >
+  < "Bank" : Agent | respSessions: emptySession, nextNonce: 1 >
+  < "c" : Agent | initSessions: (notInitiated("Bank") notInitiated("a")), respSessions: emptySession, nextNonce: 1 >
+  .
+
+op attackerStart : -> Configuration [ctor] .
+eq attackerStart =
+  < "Scrooge" : Agent | initSessions: notInitiated("Attacker"), nextNonce: 1 >
+  < "Bank" : Agent | respSessions: emptySession, nextNonce: 1 >
+  < "Attacker" : Attacker | 
+    initSessions: notInitiated("Bank"),
+    respSessions: emptySession, 
+    nextNonce: 1,
+    agentsSeen: ("Scrooge" o "Bank"),
+    noncesSeen: emptyNonceSet,
+    encrMsgsSeen: emptyPayloadSet >  
+  .
+
+op midStart : -> Configuration [ctor] .
+eq midStart =
+ < "Attacker" : Attacker | nextNonce: 1,initSessions: notInitiated("Bank"),respSessions:
+    emptySession,agentsSeen: ("Bank" o "Scrooge"),noncesSeen: nonce("Scrooge", 1),encrMsgsSeen: emptyPayloadSet > <
+    "Bank" : Agent | nextNonce: 2,respSessions: responded("Scrooge", nonce("Bank", 1)) > < "Scrooge" : Agent |
+    nextNonce: 2,initSessions: initiated("Attacker", nonce("Scrooge", 1)) > msg enc(nonce("Scrooge", 1) ; nonce(
+    "Bank", 1), pubKey("Scrooge")) from "Bank" to "Scrooge"
+
+  .
+
+***(
+search [100] attackerStart =>* C:Configuration < "Bank" : Agent | respSessions: responded("Scrooge", N:Nonce), Att > .
+
+Debug(6)> search [1] midStart =>* C:Configuration < "Bank" : Agent | respSessions: (trustedConnection("Scrooge") RS:RespSessions), Att > .
+search [1] in PROTOCOL : midStart =>* C:Configuration < "Bank" : Agent | Att,respSessions: (RS trustedConnection(
+    "Scrooge")) > .
+
+Solution 1 (state 357946)
+states: 357947  rewrites: 6178014 in 158352ms cpu (158350ms real) (39014 rewrites/second)
+C:Configuration --> < "Attacker" : Attacker | nextNonce: 2,initSessions: initiated("Bank", nonce("Attacker", 1)),
+    respSessions: emptySession,agentsSeen: ("Attacker" o "Bank" o "Scrooge"),noncesSeen: (nonce("Attacker", 1) n
+    nonce("Bank", 1) n nonce("Scrooge", 1)),encrMsgsSeen: (enc(nonce("Attacker", 1) ; "Attacker", pubKey("Bank")) p
+    enc(nonce("Scrooge", 1) ; nonce("Bank", 1), pubKey("Scrooge"))) > < "Scrooge" : Agent | nextNonce: 2,
+    initSessions: trustedConnection("Attacker") >
+Att --> nextNonce: 2
+RS --> emptySession
+
+state 357946, Configuration: < "Attacker" : Attacker | nextNonce: 2,initSessions: initiated("Bank", nonce("Attacker",
+    1)),respSessions: emptySession,agentsSeen: ("Attacker" o "Bank" o "Scrooge"),noncesSeen: (nonce("Attacker", 1) n
+    nonce("Bank", 1) n nonce("Scrooge", 1)),encrMsgsSeen: (enc(nonce("Attacker", 1) ; "Attacker", pubKey("Bank")) p
+    enc(nonce("Scrooge", 1) ; nonce("Bank", 1), pubKey("Scrooge"))) > < "Bank" : Agent | nextNonce: 2,respSessions:
+    trustedConnection("Scrooge") > < "Scrooge" : Agent | nextNonce: 2,initSessions: trustedConnection("Attacker") >
+
+)
+
+--- Drop duplicates
+var MSG : Msg .
+eq MSG MSG = MSG .
+
+endm
