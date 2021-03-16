@@ -1,0 +1,114 @@
+load crypto.maude
+
+mod PROTOCOL is
+pr CRYPTO_OBJECTS .
+
+sort MessageContent .
+op msg_from_to_ : MessageContent Oid Oid -> Msg [ctor message] .
+
+subsort Payload < MessageContent .
+
+op _;_ : Payload Payload -> Payload [ctor assoc] .
+
+
+sorts Sessions InitSessions .
+subsort Sessions < InitSessions .
+op emptySession : -> Sessions [ctor] .
+op __ : InitSessions InitSessions -> InitSessions [ctor assoc comm id: emptySession] .
+op __ : Sessions Sessions -> Sessions [ctor assoc comm id: emptySession] .
+op notInitiated : Oid -> InitSessions [ctor] .
+op initiated:_DH:_transcript:_ : Oid Nonce Payload -> InitSessions [ctor] .
+op trusted:_k1:_k2:_transcript:_ : Oid Payload Payload Payload -> Sessions [ctor] .
+
+sort RespSessions .
+subsort Sessions < RespSessions .
+op _ _ : RespSessions RespSessions -> RespSessions [ctor assoc comm id: emptySession] .
+op responded:_DH:_DHO:_transcript:_ : Oid Nonce Exp Payload -> RespSessions [ctor] .
+
+op Agent : -> Cid [ctor] .
+op nextNonce:_ : Nat -> Attribute [ctor] .
+op initSessions:_ : InitSessions -> Attribute [ctor] .
+op respSessions:_ : RespSessions -> Attribute [ctor] .
+
+vars A B I : Oid .
+vars IS : InitSessions .
+vars RS : RespSessions .
+vars N : Nat .
+vars Att : AttributeSet .
+vars Nonce Nonce' : Nonce .
+vars PL : Payload .
+vars K K' : Payload .
+vars T T' : Payload .
+vars SIG MAC : Payload .
+vars E E' : Exp .
+
+op _inSession_ : Oid RespSessions -> Bool .
+eq A inSession ((responded: A DH: Nonce DHO: E transcript: T) RS) = true .
+eq A inSession ((trusted: A k1: K k2: K' transcript: T) RS) = true .
+eq A inSession RS = false [owise] .
+
+--- Initiate
+crl [send-1] :
+  < A : Agent | initSessions: (notInitiated(B) IS), nextNonce: N, Att >
+=>
+  < A : Agent | initSessions: ((initiated: B DH: nonce(A, N) transcript: T) IS), nextNonce: s(s(N)), Att >
+  (msg exp(gen, nonce(A, N)) ; nonce(A, s(N)) from A to B)
+if
+  T := exp(gen, nonce(A, N)) ; nonce(A, s(N))
+  .
+
+crl [read-2-send-3] :
+  (msg Nonce ; E' ; SIG from B to A)
+  < A : Agent | initSessions: ((initiated: B DH: Nonce' transcript: T) IS), Att >
+=>
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T') IS), Att >
+  (msg sign(T', privKey(A)) ; mac(K, T' ; sign(T', privKey(A))) from A to B)
+if
+  verify(SIG, pubKey(B)) == (T ; E') /\
+  T' := T ; E' ; SIG /\
+  K := hash(1, exp(E', Nonce')) /\
+  K' := hash(2, exp(E', Nonce'))
+  .
+
+--- Respond
+crl [read-1-send-2] :
+  (msg E ; Nonce from A to B)
+  < B : Agent | respSessions: RS, nextNonce: N, Att >
+=>
+  < B : Agent | respSessions: ((responded: A DH: nonce(B, N) DHO: E transcript: (T ; sign(T, privKey(B)))) RS), nextNonce: s(N), Att >
+  (msg Nonce ; E' ; sign(T, privKey(B)) from B to A)
+if
+  not A inSession RS /\
+  E' := exp(gen, nonce(B, N)) /\
+  T := (E ; Nonce ; E')
+  .
+
+crl [read-3] :
+  (msg SIG ; MAC from A to B)
+  < B : Agent | respSessions: ((responded: A DH: Nonce DHO: E transcript: T) RS), Att >
+=>
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T) RS), Att >
+if
+  verify(SIG, pubKey(A)) == T /\
+  K := hash(1, exp(E, Nonce)) /\
+  K' := hash(2, exp(E, Nonce)) /\
+  MAC == mac(K, T ; SIG)
+  .
+
+
+subsort String < Oid .
+
+op start : -> Configuration [ctor] .
+eq start = 
+  < "A" : Agent | nextNonce: 0, initSessions: notInitiated("B"), respSessions: emptySession >
+  < "B" : Agent | nextNonce: 0, initSessions: emptySession, respSessions: emptySession >
+  ---< "a" : Agent | initSessions: notInitiated("c"), respSessions: emptySession, nextNonce: 1 >
+  ---< "Bank" : Agent | respSessions: emptySession, nextNonce: 1 >
+  ---< "c" : Agent | initSessions: (notInitiated("Bank") notInitiated("a")), respSessions: emptySession, nextNonce: 1 >
+  .
+
+--- Drop duplicates
+var MSG : Msg .
+eq MSG MSG = MSG .
+
+endm

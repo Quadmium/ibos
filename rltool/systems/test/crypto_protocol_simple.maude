@@ -10,10 +10,6 @@ subsort Payload < MessageContent .
 
 op _;_ : Payload Payload -> Payload [ctor] .
 
-sort Nonce .
-subsort Nonce < Payload .
-op nonce : Oid Nat -> Nonce [ctor] .
-
 
 sorts Sessions InitSessions .
 subsort Sessions < InitSessions .
