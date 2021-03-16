@@ -1,0 +1,342 @@
+load crypto.maude
+
+mod PROTOCOL is
+pr CRYPTO_OBJECTS .
+
+sort MessageContent .
+op msg_from_to_ : MessageContent Oid Oid -> Msg [ctor message] .
+
+op send_msg_ : Oid Payload -> Msg [ctor message] .
+op recv_nonce_msg_ : Oid Nonce Payload -> Msg [ctor message] .
+op resp_nonce_msg_ : Oid Nonce Payload -> Msg [ctor message] .
+
+subsort Payload < MessageContent .
+
+op _;_ : Payload Payload -> Payload [ctor assoc] .
+
+sorts Sessions InitSessions .
+subsort Sessions < InitSessions .
+op emptySession : -> Sessions [ctor] .
+op __ : InitSessions InitSessions -> InitSessions [ctor assoc comm id: emptySession] .
+op __ : Sessions Sessions -> Sessions [ctor assoc comm id: emptySession] .
+op notInitiated : Oid -> InitSessions [ctor] .
+op initiated:_DH:_transcript:_ : Oid Nonce Payload -> InitSessions [ctor] .
+op trusted:_k1:_k2:_transcript:_ : Oid Payload Payload Payload -> Sessions [ctor] .
+
+sort RespSessions .
+subsort Sessions < RespSessions .
+op _ _ : RespSessions RespSessions -> RespSessions [ctor assoc comm id: emptySession] .
+op responded:_DH:_DHO:_transcript:_ : Oid Nonce Exp Payload -> RespSessions [ctor] .
+
+op Agent : -> Cid [ctor] .
+op nextNonce:_ : Nat -> Attribute [ctor] .
+op initSessions:_ : InitSessions -> Attribute [ctor] .
+op respSessions:_ : RespSessions -> Attribute [ctor] .
+
+vars A B I : Oid .
+vars IS : InitSessions .
+vars RS : RespSessions .
+vars N : Nat .
+vars Att : AttributeSet .
+vars Nonce Nonce' : Nonce .
+vars PL PL' PL'' : Payload .
+vars K K' : Payload .
+vars T T' : Payload .
+vars SIG MAC : Payload .
+vars E E' : Exp .
+
+op _inSession_ : Oid RespSessions -> Bool .
+eq A inSession ((responded: A DH: Nonce DHO: E transcript: T) RS) = true .
+eq A inSession ((trusted: A k1: K k2: K' transcript: T) RS) = true .
+eq A inSession RS = false [owise] .
+
+--- Initiate
+crl [send-1] :
+  < A : Agent | initSessions: (notInitiated(B) IS), nextNonce: N, Att >
+=>
+  < A : Agent | initSessions: ((initiated: B DH: nonce(A, N) transcript: T) IS), nextNonce: s(s(N)), Att >
+  (msg exp(gen, nonce(A, N)) ; nonce(A, s(N)) from A to B)
+if
+  T := exp(gen, nonce(A, N)) ; nonce(A, s(N))
+  .
+
+crl [read-2-send-3] :
+  (msg Nonce ; E' ; SIG from B to A)
+  < A : Agent | initSessions: ((initiated: B DH: Nonce' transcript: T) IS), Att >
+=>
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: (T' ; sign(T', privKey(A)))) IS), Att >
+  (msg sign(T', privKey(A)) ; mac(K, T' ; sign(T', privKey(A))) from A to B)
+if
+  verify(SIG, pubKey(B)) == (T ; E') /\
+  T' := T ; E' ; SIG /\
+  K := hash(1, exp(E', Nonce')) /\
+  K' := hash(2, exp(E', Nonce'))
+  .
+
+crl [drop-read-2-send-3] :
+  (msg Nonce ; E' ; SIG from B to A)
+  < A : Agent | initSessions: ((initiated: B DH: Nonce' transcript: T) IS), Att >
+=>
+  < A : Agent | initSessions: IS, Att >
+if
+  verify(SIG, pubKey(B)) =/= (T ; E')
+  .
+
+--- Respond
+crl [read-1-send-2] :
+  (msg E ; Nonce from A to B)
+  < B : Agent | respSessions: RS, nextNonce: N, Att >
+=>
+  < B : Agent | respSessions: ((responded: A DH: nonce(B, N) DHO: E transcript: (T ; sign(T, privKey(B)))) RS), nextNonce: s(N), Att >
+  (msg Nonce ; E' ; sign(T, privKey(B)) from B to A)
+if
+  not A inSession RS /\
+  E' := exp(gen, nonce(B, N)) /\
+  T := (E ; Nonce ; E')
+  .
+
+crl [read-3] :
+  (msg SIG ; MAC from A to B)
+  < B : Agent | respSessions: ((responded: A DH: Nonce DHO: E transcript: T) RS), Att >
+=>
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T') RS), Att >
+if
+  verify(SIG, pubKey(A)) == T /\
+  T' := T ; SIG /\
+  K := hash(1, exp(E, Nonce)) /\
+  K' := hash(2, exp(E, Nonce)) /\
+  MAC == mac(K, T ; SIG)
+  .
+
+crl [drop-read-3] :
+  (msg SIG ; MAC from A to B)
+  < B : Agent | respSessions: ((responded: A DH: Nonce DHO: E transcript: T) RS), Att >
+=>
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T) RS), Att >
+if
+  K := hash(1, exp(E, Nonce)) /\
+  K' := hash(2, exp(E, Nonce)) /\
+  verify(SIG, pubKey(A)) =/= T or MAC =/= mac(K, T ; SIG)
+  .
+
+--- Post-handshake
+--- TODO: this is only one connection i.e. sending to A to send to its only connection, we need a target person in the send_msg_
+--- or alternatively limit agents to one connection and use new agents
+crl [send-msg] :
+  (send A msg PL)
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T) IS), nextNonce: N, Att >
+=>
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T') IS), nextNonce: s(N), Att >
+  (msg enc(nonce(A, N) ; PL, K') ; mac(K, T') from A to B)
+if
+  T' := T ; nonce(A, N) ; PL
+  .
+
+crl [recv-msg] :
+  (msg PL ; MAC from A to B)
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T) RS), nextNonce: N, Att >
+=>
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T') RS), nextNonce: s(N), Att >
+  (recv B nonce Nonce msg PL')
+if
+  Nonce ; PL' := dec(PL, K') /\
+  T' := T ; Nonce ; PL' /\
+  mac(K, T') == MAC
+  .
+
+crl [resp-msg] :
+  (resp B nonce Nonce msg PL)
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T) RS), nextNonce: N, Att >
+=>
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T') RS), nextNonce: N, Att >
+  (msg enc(Nonce ; PL, K') ; mac(K, T') from B to A)
+if
+  T' := T ; Nonce ; PL
+  .
+
+crl [recv-resp-msg] :
+  (msg PL ; MAC from B to A) 
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T) IS), nextNonce: N, Att >
+=>
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T') IS), nextNonce: N, Att >
+  (recv A nonce Nonce msg PL')
+if
+  Nonce ; PL' := dec(PL, K') /\
+  T' := T ; Nonce ; PL' /\
+  mac(K, T') == MAC
+  .
+
+--- Attacker
+sort NonceSet .
+subsort Nonce < NonceSet .
+op emptyNonceSet : -> NonceSet [ctor] .
+op _ n _ : NonceSet NonceSet -> NonceSet [ctor assoc comm id: emptyNonceSet] .
+eq Nonce n Nonce = Nonce .
+
+sort OidSet .
+subsort Oid < OidSet .
+op emptyOidSet : -> OidSet [ctor] .
+op _ o _ : OidSet OidSet -> OidSet [ctor assoc comm id: emptyOidSet] .
+eq A o A = A .
+
+sort PayloadSet .
+subsort Payload < PayloadSet .
+op emptyPayloadSet : -> PayloadSet [ctor] .
+op _ p _ : PayloadSet PayloadSet -> PayloadSet [ctor assoc comm id: emptyPayloadSet] .
+eq PL p PL = PL .
+
+sort ExpSet .
+subsort Exp < ExpSet .
+op emptyExpSet : -> ExpSet [ctor] .
+op _ e _ : ExpSet ExpSet -> ExpSet [ctor assoc comm id: emptyExpSet] .
+eq E e E = E .
+
+op Attacker : -> Cid .
+op agentsSeen:_ : OidSet -> Attribute .
+op noncesSeen:_ : NonceSet -> Attribute .
+op encrMsgsSeen:_ : PayloadSet -> Attribute .
+op expSeen:_ : ExpSet -> Attribute .
+op sigSeen:_ : PayloadSet -> Attribute .
+op macSeen:_ : PayloadSet -> Attribute .
+
+vars NS : NonceSet .
+vars OS : OidSet .
+vars PS : PayloadSet .
+vars ES : ExpSet .
+vars SS : PayloadSet .
+vars MS : PayloadSet .
+
+--- Normal interactions
+--- Initiate
+crl [attacker-send-1] :
+  < A : Attacker | initSessions: (notInitiated(B) IS), nextNonce: N, agentsSeen: OS, noncesSeen: NS, Att >
+=>
+  < A : Attacker | initSessions: ((initiated: B DH: nonce(A, N) transcript: T) IS), nextNonce: s(s(N)), agentsSeen: (B o OS), noncesSeen: (nonce(A, N) n nonce(A, s(N)) n NS), Att >
+  (msg exp(gen, nonce(A, N)) ; nonce(A, s(N)) from A to B)
+if
+  T := exp(gen, nonce(A, N)) ; nonce(A, s(N))
+  .
+
+crl [attacker-read-2-send-3] :
+  (msg Nonce ; E' ; SIG from B to A)
+  < A : Attacker | initSessions: ((initiated: B DH: Nonce' transcript: T) IS), noncesSeen: NS, expSeen: ES, sigSeen: SS, macSeen: MS, Att >
+=>
+  < A : Attacker | initSessions: ((trusted: B k1: K k2: K' transcript: T') IS), 
+    noncesSeen: (Nonce n NS), 
+    expSeen: (E' e ES), 
+    sigSeen: (SIG p sign(T', privKey(A)) p SS), 
+    macSeen: (mac(K, T' ; sign(T', privKey(A))) p MS), Att >
+  (msg sign(T', privKey(A)) ; mac(K, T' ; sign(T', privKey(A))) from A to B)
+if
+  verify(SIG, pubKey(B)) == (T ; E') /\
+  T' := T ; E' ; SIG /\
+  K := hash(1, exp(E', Nonce')) /\
+  K' := hash(2, exp(E', Nonce'))
+  .
+
+***(
+
+--- Respond
+--- Change to Na ; Nb ; B to fix exploit
+crl [attacker-read-1-send-2] :
+  (msg enc(Nonce ; A, pubKey(B)) from A to B)
+  < B : Attacker | respSessions: RS, nextNonce: N, agentsSeen: OS, noncesSeen: NS, Att >
+=>
+  < B : Attacker | respSessions: (responded(A, nonce(B, N)) RS), nextNonce: s(N), agentsSeen: (A o OS), noncesSeen: (Nonce n nonce(B, N) n NS), Att >
+  (msg enc(Nonce ; nonce(B, N), pubKey(A)) from B to A)
+if
+  not A inSession RS
+  .
+
+rl [attacker-read-3] :
+  (msg enc(Nonce, pubKey(B)) from A to B)
+  < B : Attacker | respSessions: (responded(A, Nonce) RS), Att >
+=>
+  < B : Attacker | respSessions: (trustedConnection(A) RS), Att >
+  .
+
+--- Attacker interactions
+
+crl [intercept-but-not-understand] :
+  (msg PL from A to B)
+  < I : Attacker | agentsSeen: OS, encrMsgsSeen: PS, Att >
+=>
+  < I : Attacker | agentsSeen: (A o B o OS), encrMsgsSeen: (PL p PS), Att >
+if
+  B =/= I .
+
+rl [intercept-msg1-and-understand] :
+  (msg enc(Nonce ; A, pubKey(I)) from B to I)
+  < I : Attacker | agentsSeen: OS, noncesSeen: NS, Att >
+=>
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n NS), Att >
+.
+
+rl [intercept-msg2-and-understand] :
+  (msg enc(Nonce ; Nonce', pubKey(I)) from B to I)
+  < I : Attacker | agentsSeen: OS, noncesSeen: NS, Att >
+=>
+  < I : Attacker | agentsSeen: (B o OS), noncesSeen: (Nonce n Nonce' n NS), Att >
+.
+
+rl [intercept-msg3-and-understand] :
+  (msg enc(Nonce, pubKey(I)) from B to I)
+  < I : Attacker | agentsSeen: OS, noncesSeen: NS, Att >
+=>
+  < I : Attacker | agentsSeen: (B o OS), noncesSeen: (Nonce n NS), Att >
+.
+
+crl [send-encrypted] :
+  < I : Attacker | agentsSeen: (A o OS), encrMsgsSeen: (enc(PL, pubKey(B)) p PS), Att >
+=>
+  < I : Attacker | agentsSeen: (A o OS), encrMsgsSeen: (enc(PL, pubKey(B)) p PS), Att >
+  (msg enc(PL, pubKey(B)) from A to B)
+if
+  A =/= B /\ B =/= I
+  .
+
+crl [send-1-fake] :
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n NS), Att >
+=>
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n NS), Att >
+  (msg enc(Nonce ; A, pubKey(B)) from A to B)
+if
+  A =/= B /\ B =/= I
+  .
+
+crl [send-2-fake] :
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n Nonce' n NS), Att >
+=>
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n Nonce' n NS), Att >
+  (msg enc(Nonce ; Nonce', pubKey(A)) from B to A)
+if
+  A =/= B /\ A =/= I
+  .
+
+crl [send-3-fake] :
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n NS), Att >
+=>
+  < I : Attacker | agentsSeen: (A o B o OS), noncesSeen: (Nonce n NS), Att >
+  (msg enc(Nonce, pubKey(B)) from A to B)
+if
+  A =/= B /\ B =/= I
+  .
+  )
+
+subsort String < Oid .
+
+op start : -> Configuration [ctor] .
+eq start = 
+  < "A" : Agent | nextNonce: 0, initSessions: notInitiated("B"), respSessions: emptySession >
+  < "B" : Agent | nextNonce: 0, initSessions: emptySession, respSessions: emptySession >
+  (send "A" msg "hello")
+  ---< "a" : Agent | initSessions: notInitiated("c"), respSessions: emptySession, nextNonce: 1 >
+  ---< "Bank" : Agent | respSessions: emptySession, nextNonce: 1 >
+  ---< "c" : Agent | initSessions: (notInitiated("Bank") notInitiated("a")), respSessions: emptySession, nextNonce: 1 >
+  .
+
+--- Drop duplicates
+var MSG : Msg .
+eq MSG MSG = MSG .
+
+endm
