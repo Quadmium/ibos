@@ -5,9 +5,8 @@ mod TLS is
 pr CRYPTO_OBJECTS .
 pr NETWORK .
 
-op send_msg_ : Oid Payload -> Msg [ctor message] .
-op recv_nonce_msg_ : Oid Nonce Payload -> Msg [ctor message] .
-op resp_nonce_msg_ : Oid Nonce Payload -> Msg [ctor message] .
+op TLSsend_msg_ : Oid Payload -> Msg [ctor message] .
+op TLSrecv_msg_ : Oid Payload -> Msg [ctor message] .
 
 subsort Payload < MessageContent .
 
@@ -20,7 +19,7 @@ op __ : InitSessions InitSessions -> InitSessions [ctor assoc comm id: emptySess
 op __ : Sessions Sessions -> Sessions [ctor assoc comm id: emptySession] .
 op notInitiated : Oid -> InitSessions [ctor] .
 op initiated:_DH:_transcript:_ : Oid Nonce Payload -> InitSessions [ctor] .
-op trusted:_k1:_k2:_transcript:_ : Oid Payload Payload Payload -> Sessions [ctor] .
+op trusted:_k1:_k2:_nonce:_ : Oid Payload Payload Nonce -> Sessions [ctor] .
 
 sort RespSessions .
 subsort Sessions < RespSessions .
@@ -46,7 +45,7 @@ vars E E' : Exp .
 
 op _inSession_ : Oid RespSessions -> Bool .
 eq A inSession ((responded: A DH: Nonce DHO: E transcript: T) RS) = true .
-eq A inSession ((trusted: A k1: K k2: K' transcript: T) RS) = true .
+eq A inSession ((trusted: A k1: K k2: K' nonce: Nonce) RS) = true .
 eq A inSession RS = false [owise] .
 
 --- Initiate
@@ -63,7 +62,7 @@ crl [read-2-send-3] :
   (msg Nonce ; E' ; SIG from B to A)
   < A : Agent | initSessions: ((initiated: B DH: Nonce' transcript: T) IS), Att >
 =>
-  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: (T' ; sign(T', privKey(A)))) IS), Att >
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: none) IS), Att >
   (msg sign(T', privKey(A)) ; mac(K, T' ; sign(T', privKey(A))) from A to B)
 if
   verify(SIG, pubKey(B)) == (T ; E') /\
@@ -98,7 +97,7 @@ crl [read-3] :
   (msg SIG ; MAC from A to B)
   < B : Agent | respSessions: ((responded: A DH: Nonce DHO: E transcript: T) RS), Att >
 =>
-  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T') RS), Att >
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: none) RS), Att >
 if
   verify(SIG, pubKey(A)) == T /\
   T' := T ; SIG /\
@@ -111,7 +110,7 @@ crl [drop-read-3] :
   (msg SIG ; MAC from A to B)
   < B : Agent | respSessions: ((responded: A DH: Nonce DHO: E transcript: T) RS), Att >
 =>
-  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T) RS), Att >
+  < B : Agent | respSessions: RS, Att >
 if
   K := hash(1, exp(E, Nonce)) /\
   K' := hash(2, exp(E, Nonce)) /\
@@ -119,50 +118,42 @@ if
   .
 
 --- Post-handshake
---- TODO: this is only one connection i.e. sending to A to send to its only connection, we need a target person in the send_msg_
---- or alternatively limit agents to one connection and use new agents
-crl [send-msg] :
-  (send A msg PL)
-  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T) IS), nextNonce: N, Att >
+rl [send-msg] :
+  (TLSsend A msg PL)
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: Nonce') IS), nextNonce: N, Att >
 =>
-  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T') IS), nextNonce: s(N), Att >
-  (msg enc(nonce(A, N) ; PL, K') ; mac(K, T') from A to B)
-if
-  T' := T ; nonce(A, N) ; PL
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: nonce(A, N)) IS), nextNonce: s(N), Att >
+  (msg enc(nonce(A, N) ; PL, K') ; mac(K, enc(nonce(A, N) ; PL, K')) from A to B)
   .
 
 crl [recv-msg] :
   (msg PL ; MAC from A to B)
-  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T) RS), nextNonce: N, Att >
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: Nonce') RS), Att >
 =>
-  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T') RS), nextNonce: s(N), Att >
-  (recv B nonce Nonce msg PL')
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: Nonce) RS), Att >
+  (TLSrecv B msg PL')
 if
-  Nonce ; PL' := dec(PL, K') /\
-  T' := T ; Nonce ; PL' /\
-  mac(K, T') == MAC
+  mac(K, PL) == MAC /\
+  Nonce ; PL' := dec(PL, K')
   .
 
-crl [resp-msg] :
-  (resp B nonce Nonce msg PL)
-  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T) RS), nextNonce: N, Att >
+rl [resp-send-msg] :
+  (TLSsend B msg PL)
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: Nonce) RS), Att >
 =>
-  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T') RS), nextNonce: N, Att >
-  (msg enc(Nonce ; PL, K') ; mac(K, T') from B to A)
-if
-  T' := T ; Nonce ; PL
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: Nonce) RS), Att >
+  (msg enc(Nonce ; PL, K') ; mac(K, enc(Nonce ; PL, K')) from B to A)
   .
 
-crl [recv-resp-msg] :
-  (msg PL ; MAC from B to A) 
-  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T) IS), nextNonce: N, Att >
+crl [resp-recv-msg] :
+  (msg PL ; MAC from B to A)
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: Nonce) IS), Att >
 =>
-  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T') IS), nextNonce: N, Att >
-  (recv A nonce Nonce msg PL')
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: Nonce) IS), Att >
+  (TLSrecv A msg PL')
 if
-  Nonce ; PL' := dec(PL, K') /\
-  T' := T ; Nonce ; PL' /\
-  mac(K, T') == MAC
+  mac(K, PL) == MAC /\
+  Nonce ; PL' := dec(PL, K')
   .
 
 --- Attacker
@@ -207,6 +198,9 @@ vars MS : PayloadSet .
 
 --- Normal interactions
 --- Initiate
+
+
+***(
 crl [attacker-send-1] :
   < A : Attacker | initSessions: (notInitiated(B) IS), nextNonce: N, agentsSeen: OS, noncesSeen: NS, Att >
 =>
@@ -232,8 +226,6 @@ if
   K := hash(1, exp(E', Nonce')) /\
   K' := hash(2, exp(E', Nonce'))
   .
-
-***(
 
 --- Respond
 --- Change to Na ; Nb ; B to fix exploit
@@ -324,14 +316,20 @@ if
 
 subsort String < Oid .
 
-op start : -> Configuration [ctor] .
-eq start = 
+op TLSstart : -> Configuration [ctor] .
+eq TLSstart = 
   < "A" : Agent | nextNonce: 0, initSessions: notInitiated("B"), respSessions: emptySession >
   < "B" : Agent | nextNonce: 0, initSessions: emptySession, respSessions: emptySession >
-  (send "A" msg "hello")
+  (TLSsend "A" msg "hello")
   ---< "a" : Agent | initSessions: notInitiated("c"), respSessions: emptySession, nextNonce: 1 >
   ---< "Bank" : Agent | respSessions: emptySession, nextNonce: 1 >
   ---< "c" : Agent | initSessions: (notInitiated("Bank") notInitiated("a")), respSessions: emptySession, nextNonce: 1 >
+  .
+
+rl [t] :
+  (TLSrecv "B" msg "hello")
+=>
+  (TLSsend "B" msg "reply")
   .
 
 --- Drop duplicates

@@ -130,4 +130,40 @@ eq start4 = {
     } >
   }
   .
+
+op start5 : -> State [ctor] .
+eq start5 = {
+    < blankWrapper(tlsWrapper("A")) : BlankWrapper | world: {
+      < tlsWrapper("A") : TLSWrapper | trusted: false, world: {
+        < "A" : Client | cstate: opening, target: "B", read: "" >
+      } >
+    } >
+    
+    
+    < blankWrapper(tlsWrapper("B")) : BlankWrapper | world: {
+      < tlsWrapper("B") : TLSWrapper | trusted: false, world: {
+        < "B" : Server | sstate: waiting, read: "" >
+      } >
+    } >
+    
+  }
+  .
+
+op start6 : -> State [ctor] .
+eq start6 = {
+    < tlsWrapper(tlsWrapper("A")) : TLSWrapper | trusted: false, world: {
+      < tlsWrapper("A") : TLSWrapper | trusted: false, world: {
+        < "A" : Client | cstate: opening, target: "B", read: "" >
+      } >
+    } >
+    
+    
+    < tlsWrapper(tlsWrapper("B")) : TLSWrapper | trusted: false, world: {
+      < tlsWrapper("B") : TLSWrapper | trusted: false, world: {
+        < "B" : Server | sstate: waiting, read: "" >
+      } >
+    } >
+    
+  }
+  .
 endm

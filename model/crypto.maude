@@ -121,5 +121,6 @@ eq flip(pubKey(O)) = privKey(O) .
 eq flip(privKey(O)) = pubKey(O) .
 
 op nonce : Oid Nat -> Nonce [ctor] .
+op none : -> Nonce [ctor] .
 
 endm

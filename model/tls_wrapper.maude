@@ -12,6 +12,7 @@ op TLSWrapper : -> Cid .
 
 op world:_ : State -> Attribute .
 op trusted:_ : Bool -> Attribute .
+op connected:_ : Oid -> Attribute .
 
 vars A B O : Oid .
 vars M : MessageContent .
@@ -66,38 +67,42 @@ if
   .
 
 rl [agentsConnected] :
-  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T) IS), Att >
-  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T) RS), Att' >
-  < A : TLSWrapper | trusted: false, Att'' >
-  < B : TLSWrapper | trusted: false, Att''' >
+  < tlsWrapper(A) : Agent | initSessions: ((trusted: tlsWrapper(B) k1: K k2: K' nonce: Nonce) IS), Att >
+  < tlsWrapper(A) : TLSWrapper | trusted: false, Att'' >
 =>
-  < A : Agent | initSessions: ((trusted: B k1: K k2: K' transcript: T) IS), Att >
-  < B : Agent | respSessions: ((trusted: A k1: K k2: K' transcript: T) RS), Att' >
-  < A : TLSWrapper | trusted: true, Att'' >
-  < B : TLSWrapper | trusted: true, Att''' >
+  < tlsWrapper(A) : Agent | initSessions: ((trusted: tlsWrapper(B) k1: K k2: K' nonce: Nonce) IS), Att >
+  < tlsWrapper(A) : TLSWrapper | trusted: true, connected: B, Att'' >
+  .
+
+rl [agentsConnected] :
+  < tlsWrapper(B) : Agent | respSessions: ((trusted: tlsWrapper(A) k1: K k2: K' nonce: Nonce) RS), Att' >
+  < tlsWrapper(B) : TLSWrapper | trusted: false, Att''' >
+=>
+  < tlsWrapper(B) : Agent | respSessions: ((trusted: tlsWrapper(A) k1: K k2: K' nonce: Nonce) RS), Att' >
+  < tlsWrapper(B) : TLSWrapper | trusted: true, connected: A, Att''' >
   .
 
 crl [outgoingMsg] :
-  < tlsWrapper(A) : TLSWrapper | trusted: true, world: {
+  < tlsWrapper(A) : TLSWrapper | connected: B, world: {
     (msg M from A to B)
     C
   }, Att >
 =>
-  < tlsWrapper(A) : TLSWrapper | trusted: true, world: {
+  < tlsWrapper(A) : TLSWrapper | connected: B, world: {
     C
   }, Att >
-  (msg M from tlsWrapper(A) to tlsWrapper(B))
+  (TLSsend tlsWrapper(A) msg M)
 if
   (open A to B) in C or (open B to A) in C
   .
 
 crl [incomingMsg] :
-  < tlsWrapper(B) : TLSWrapper | trusted: true, world: {
+  < tlsWrapper(B) : TLSWrapper | connected: A, world: {
     C
   }, Att >
-  (msg M from tlsWrapper(A) to tlsWrapper(B))
+  (TLSrecv tlsWrapper(B) msg M)
 =>
-  < tlsWrapper(B) : TLSWrapper | trusted: true, world: {
+  < tlsWrapper(B) : TLSWrapper | connected: A, world: {
     (msg M from A to B)
     C
   }, Att >
