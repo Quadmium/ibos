@@ -141,7 +141,7 @@ rl [resp-send-msg] :
   (TLSsend B msg PL)
   < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: Nonce) RS), Att >
 =>
-  < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: Nonce) RS), Att >
+  < B : Agent | respSessions: RS, Att >
   (msg enc(Nonce ; PL, K') ; mac(K, enc(Nonce ; PL, K')) from B to A)
   .
 
@@ -149,7 +149,7 @@ crl [resp-recv-msg] :
   (msg PL ; MAC from B to A)
   < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: Nonce) IS), Att >
 =>
-  < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: Nonce) IS), Att >
+  < A : Agent | initSessions: (notInitiated(B) IS), Att >
   (TLSrecv A msg PL')
 if
   mac(K, PL) == MAC /\
