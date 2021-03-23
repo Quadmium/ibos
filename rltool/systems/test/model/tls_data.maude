@@ -1,0 +1,210 @@
+load crypto.maude
+load network.maude
+
+--- Logic for TLS handshake and data transfer
+mod TLS is
+pr CRYPTO_OBJECTS .
+pr NETWORK .
+
+--- Send a message over an established TLS connection (Oid being the sender)
+op TLSsend_msg_ : Oid Payload -> Msg [ctor message] .
+
+--- A message was received over an established TLS connection (Oid being the receiver)
+op TLSrecv_msg_ : Oid Payload -> Msg [ctor message] .
+
+subsort Payload < MessageContent .
+op _;_ : Payload Payload -> Payload [ctor assoc] .
+
+--- Sessions open (we only use one for now, but may be useful in the future)
+sorts Sessions InitSessions .
+subsort Sessions < InitSessions .
+op emptySession : -> Sessions [ctor] .
+op __ : InitSessions InitSessions -> InitSessions [ctor assoc comm id: emptySession] .
+op __ : Sessions Sessions -> Sessions [ctor assoc comm id: emptySession] .
+
+--- A notInitiated(..) will start the process to connect to Oid
+op notInitiated : Oid -> InitSessions [ctor] .
+
+--- An initiated connection is the intermediate step during handshake
+op initiated:_DH:_transcript:_ : Oid Nonce Payload -> InitSessions [ctor] .
+
+--- A trusted connection has two keys and remembers the nonce used for data exchange
+op trusted:_k1:_k2:_nonce:_ : Oid Payload Payload Nonce -> Sessions [ctor] .
+
+--- Sessions we are responding to
+sort RespSessions .
+subsort Sessions < RespSessions .
+op _ _ : RespSessions RespSessions -> RespSessions [ctor assoc comm id: emptySession] .
+
+--- A responding intermediate session state, which converts to trusted afterwards
+op responded:_DH:_DHO:_transcript:_ : Oid Nonce Exp Payload -> RespSessions [ctor] .
+
+op Agent : -> Cid [ctor] .
+--- Nonce counter
+op nextNonce:_ : Nat -> Attribute [ctor] .
+--- Initiator sessions
+op initSessions:_ : InitSessions -> Attribute [ctor] .
+--- Responding sessions
+op respSessions:_ : RespSessions -> Attribute [ctor] .
+
+vars A B I : Oid .
+vars IS : InitSessions .
+vars RS : RespSessions .
+vars N : Nat .
+vars Att : AttributeSet .
+vars Nonce Nonce' : Nonce .
+vars PL PL' PL'' : Payload .
+vars K K' : Payload .
+vars T T' : Payload .
+vars SIG MAC : Payload .
+vars E E' : Exp .
+
+--- Checks if an agent is already connected to
+op _inSession_ : Oid RespSessions -> Bool .
+eq A inSession ((responded: A DH: Nonce DHO: E transcript: T) RS) = true .
+eq A inSession ((trusted: A k1: K k2: K' nonce: Nonce) RS) = true .
+eq A inSession RS = false [owise] .
+
+--- Initiate
+--- Sends handshake beginning and remembers transcript
+crl [send-1] :
+  < A : Agent | initSessions: (notInitiated(B) IS), nextNonce: N, Att >
+=>
+  < A : Agent | initSessions: ((initiated: B DH: nonce(A, N) transcript: T) IS), nextNonce: s(s(N)), Att >
+  (msg exp(gen, nonce(A, N)) ; nonce(A, s(N)) from A to B)
+if
+  T := exp(gen, nonce(A, N)) ; nonce(A, s(N))
+  .
+
+--- Receivess handshake reponse, and it is valid
+crl [read-2-send-3] :
+  (msg Nonce ; E' ; SIG from B to A)
+  < A : Agent | initSessions: ((initiated: B DH: Nonce' transcript: T) IS), Att >
+=>
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: none) IS), Att >
+  (msg sign(T', privKey(A)) ; mac(K, T' ; sign(T', privKey(A))) from A to B)
+if
+  verify(SIG, pubKey(B)) == (T ; E') /\
+  T' := T ; E' ; SIG /\
+  K := hash(1, exp(E', Nonce')) /\
+  K' := hash(2, exp(E', Nonce'))
+  .
+
+--- Receives handshake response and it is not valid
+crl [drop-read-2-send-3] :
+  (msg Nonce ; E' ; SIG from B to A)
+  < A : Agent | initSessions: ((initiated: B DH: Nonce' transcript: T) IS), Att >
+=>
+  < A : Agent | initSessions: IS, Att >
+if
+  verify(SIG, pubKey(B)) =/= (T ; E')
+  .
+
+--- Respond
+--- Receives handshake and responds with own handshake part
+crl [read-1-send-2] :
+  (msg E ; Nonce from A to B)
+  < B : Agent | respSessions: RS, nextNonce: N, Att >
+=>
+  < B : Agent | respSessions: ((responded: A DH: nonce(B, N) DHO: E transcript: (T ; sign(T, privKey(B)))) RS), nextNonce: s(N), Att >
+  (msg Nonce ; E' ; sign(T, privKey(B)) from B to A)
+if
+  not A inSession RS /\
+  E' := exp(gen, nonce(B, N)) /\
+  T := (E ; Nonce ; E')
+  .
+
+--- Receives handshake responds and it is valid
+crl [read-3] :
+  (msg SIG ; MAC from A to B)
+  < B : Agent | respSessions: ((responded: A DH: Nonce DHO: E transcript: T) RS), Att >
+=>
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: none) RS), Att >
+if
+  verify(SIG, pubKey(A)) == T /\
+  T' := T ; SIG /\
+  K := hash(1, exp(E, Nonce)) /\
+  K' := hash(2, exp(E, Nonce)) /\
+  MAC == mac(K, T ; SIG)
+  .
+
+--- Receives handshake response and it is not valid
+crl [drop-read-3] :
+  (msg SIG ; MAC from A to B)
+  < B : Agent | respSessions: ((responded: A DH: Nonce DHO: E transcript: T) RS), Att >
+=>
+  < B : Agent | respSessions: RS, Att >
+if
+  K := hash(1, exp(E, Nonce)) /\
+  K' := hash(2, exp(E, Nonce)) /\
+  verify(SIG, pubKey(A)) =/= T or MAC =/= mac(K, T ; SIG)
+  .
+
+--- Post-handshake
+--- Someone wants to send message on this established channel
+rl [send-msg] :
+  (TLSsend A msg PL)
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: Nonce') IS), nextNonce: N, Att >
+=>
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: nonce(A, N)) IS), nextNonce: s(N), Att >
+  (msg enc(nonce(A, N) ; PL, K') ; mac(K, enc(nonce(A, N) ; PL, K')) from A to B)
+  .
+
+--- Receive message on established channel, tell user using TLSrecv
+crl [recv-msg] :
+  (msg PL ; MAC from A to B)
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: Nonce') RS), Att >
+=>
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: Nonce) RS), Att >
+  (TLSrecv B msg PL')
+if
+  mac(K, PL) == MAC /\
+  Nonce ; PL' := dec(PL, K')
+  .
+
+--- Someone wants to send message on this established channel in reply to first message
+--- After this, we force re-authentication so K1 / K2 are not reused
+rl [resp-send-msg] :
+  (TLSsend B msg PL)
+  < B : Agent | respSessions: ((trusted: A k1: K k2: K' nonce: Nonce) RS), Att >
+=>
+  < B : Agent | respSessions: RS, Att >
+  (msg enc(Nonce ; PL, K') ; mac(K, enc(Nonce ; PL, K')) from B to A)
+  .
+
+--- Tell user about received message
+--- After this, we force re-authentication so K1 / K2 are not reused
+crl [resp-recv-msg] :
+  (msg PL ; MAC from B to A)
+  < A : Agent | initSessions: ((trusted: B k1: K k2: K' nonce: Nonce) IS), Att >
+=>
+  < A : Agent | initSessions: (notInitiated(B) IS), Att >
+  (TLSrecv A msg PL')
+if
+  mac(K, PL) == MAC /\
+  Nonce ; PL' := dec(PL, K')
+  .
+
+--- Demo
+subsort String < Oid .
+
+--- Have A talk to B
+op TLSstart : -> Configuration [ctor] .
+eq TLSstart = 
+  < "A" : Agent | nextNonce: 0, initSessions: notInitiated("B"), respSessions: emptySession >
+  < "B" : Agent | nextNonce: 0, initSessions: emptySession, respSessions: emptySession >
+  (TLSsend "A" msg "hello")
+  .
+
+--- Fake B response
+rl [BRespond] :
+  (TLSrecv "B" msg "hello")
+=>
+  (TLSsend "B" msg "reply")
+  .
+
+--- Drop duplicates
+var MSG : Msg .
+eq MSG MSG = MSG .
+
+endm

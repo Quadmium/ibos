@@ -1,0 +1,179 @@
+load state.maude
+load network.maude
+load blank_wrapper.maude
+load tls_wrapper.maude
+
+mod CLIENT_SERVER_SHARED is
+pr NETWORK .
+
+op read:_ : String -> Attribute [ctor] .
+endm
+
+--- A client that sends one message and reads the response
+mod CLIENT is
+pr CLIENT_SERVER_SHARED .
+
+op Client : -> Cid [ctor] .
+
+op target:_ : Oid -> Attribute [ctor] .
+
+sort ClientState .
+ops opening sending waiting : -> ClientState [ctor] .
+op cstate:_ : ClientState -> Attribute [ctor] .
+op read:_ : String -> Attribute [ctor] .
+
+vars A B : Oid .
+vars Att : AttributeSet .
+vars S S' : String .
+
+rl [inititate] :
+  < A : Client | cstate: opening, target: B, Att >
+=>
+  < A : Client | cstate: sending, target: B, Att >
+  (open A to B)
+  .
+
+rl [send] :
+  < A : Client | cstate: sending, target: B, Att >
+=>
+  < A : Client | cstate: waiting, target: B, Att >
+  (msg "ClientMsg" from A to B)
+  .
+
+rl [read] :
+  < A : Client | cstate: waiting, read: S, Att >
+  (open A to B)
+  (msg S' from B to A)
+=>
+  (open A to B)
+  < A : Client | cstate: waiting, read: (S + S'), Att >
+  .
+endm
+
+--- A server that responds to a message
+mod SERVER is
+pr CLIENT_SERVER_SHARED .
+
+op Server : -> Cid [ctor] .
+
+sort ServerState .
+ops waiting : -> ServerState [ctor] .
+op sstate:_ : ServerState -> Attribute [ctor] .
+
+vars A B : Oid .
+vars Att : AttributeSet .
+vars S S' : String .
+
+rl [read] :
+  < B : Server | sstate: waiting, read: S, Att >
+  (open A to B)
+  (msg S' from A to B)
+=>
+  < B : Server | sstate: waiting, read: (S + S'), Att >
+  (open A to B)
+  (msg "ServerReply" from B to A)
+  .
+endm
+
+--- The overall interaction between client / server in several different scenarios
+--- Use "rew start ." or start2 ...
+mod INTERACTION is
+pr STATE .
+pr CLIENT .
+pr SERVER .
+pr BLANK_WRAPPER .
+pr TLS_WRAPPER .
+
+subsort String < Oid .
+
+--- No wrappers, just A to B
+op start : -> State [ctor] .
+eq start = {
+    < "A" : Client | cstate: opening, target: "B", read: "" >
+    < "B" : Server | sstate: waiting, read: "" >
+  }
+  .
+
+--- The blank wrapper
+op start2 : -> State [ctor] .
+eq start2 = {
+    < blankWrapper("A") : BlankWrapper | world: {
+      < "A" : Client | cstate: opening, target: "B", read: "" >
+    } >
+    
+    < blankWrapper("B") : BlankWrapper | world: {
+      < "B" : Server | sstate: waiting, read: "" >
+    } >
+  }
+  .
+  
+--- Nested blank wrappers
+op start3 : -> State [ctor] .
+eq start3 = {
+    < blankWrapper(blankWrapper("A")) : BlankWrapper | world: {
+      < blankWrapper("A") : BlankWrapper | world: {
+        < "A" : Client | cstate: opening, target: "B", read: "" >
+      } >
+    } >
+    
+    
+    < blankWrapper(blankWrapper("B")) : BlankWrapper | world: {
+      < blankWrapper("B") : BlankWrapper | world: {
+        < "B" : Server | sstate: waiting, read: "" >
+      } >
+    } >
+    
+  }
+  .
+
+--- The TLS wrapper
+op start4 : -> State [ctor] .
+eq start4 = {
+    < tlsWrapper("A") : TLSWrapper | trusted: false, world: {
+      < "A" : Client | cstate: opening, target: "B", read: "" >
+    } >
+    
+    < tlsWrapper("B") : TLSWrapper | trusted: false, world: {
+      < "B" : Server | sstate: waiting, read: "" >
+    } >
+  }
+  .
+
+--- Nested blank / TLS wrappers
+op start5 : -> State [ctor] .
+eq start5 = {
+    < blankWrapper(tlsWrapper("A")) : BlankWrapper | world: {
+      < tlsWrapper("A") : TLSWrapper | trusted: false, world: {
+        < "A" : Client | cstate: opening, target: "B", read: "" >
+      } >
+    } >
+    
+    
+    < blankWrapper(tlsWrapper("B")) : BlankWrapper | world: {
+      < tlsWrapper("B") : TLSWrapper | trusted: false, world: {
+        < "B" : Server | sstate: waiting, read: "" >
+      } >
+    } >
+    
+  }
+  .
+
+--- Nested TLS wrappers
+op start6 : -> State [ctor] .
+eq start6 = {
+    < tlsWrapper(tlsWrapper("A")) : TLSWrapper | trusted: false, world: {
+      < tlsWrapper("A") : TLSWrapper | trusted: false, world: {
+        < "A" : Client | cstate: opening, target: "B", read: "" >
+      } >
+    } >
+    
+    
+    < tlsWrapper(tlsWrapper("B")) : TLSWrapper | trusted: false, world: {
+      < tlsWrapper("B") : TLSWrapper | trusted: false, world: {
+        < "B" : Server | sstate: waiting, read: "" >
+      } >
+    } >
+    
+  }
+  .
+endm
