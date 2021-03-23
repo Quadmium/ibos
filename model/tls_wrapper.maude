@@ -2,6 +2,8 @@ load state.maude
 load network.maude
 load tls_data.maude
 
+--- Implements TLS wrapper using the TLS module
+--- See blank_wrapper.maude for more detailed comments
 mod TLS_WRAPPER is
 pr NETWORK .
 pr STATE .
@@ -10,8 +12,13 @@ pr TLS .
 op tlsWrapper : Oid -> Oid .
 op TLSWrapper : -> Cid .
 
+--- Contained client/server
 op world:_ : State -> Attribute .
+
+--- Do we trust the connection yet?
 op trusted:_ : Bool -> Attribute .
+
+--- Who are we connected to?
 op connected:_ : Oid -> Attribute .
 
 vars A B O : Oid .
@@ -30,6 +37,8 @@ vars K K' : Payload .
 vars T : Payload .
 vars Nonce : Nonce .
 
+--- When initiating, also create an Agent
+--- The two agents will authenticate, and then give us the go-ahead to use them to send more data
 crl [clientInitiate] : {
   < tlsWrapper(A) : TLSWrapper | world: {
     (open A to B)
@@ -50,6 +59,7 @@ if
   not (open tlsWrapper(A) to tlsWrapper(B)) in C'
   .
 
+--- This creates the other agent
 crl [wrapperInitiate] :
   < tlsWrapper(B) : TLSWrapper | world: {
     C
@@ -66,6 +76,7 @@ if
   not (open A to B) in C
   .
 
+--- Once agent has trusted the other, we can mark it down and allow sending messages
 rl [agentsConnected] :
   < tlsWrapper(A) : Agent | initSessions: ((trusted: tlsWrapper(B) k1: K k2: K' nonce: Nonce) IS), Att >
   < tlsWrapper(A) : TLSWrapper | trusted: false, Att'' >
@@ -74,6 +85,7 @@ rl [agentsConnected] :
   < tlsWrapper(A) : TLSWrapper | trusted: true, connected: B, Att'' >
   .
 
+--- Need to do this for both agents
 rl [agentsConnected] :
   < tlsWrapper(B) : Agent | respSessions: ((trusted: tlsWrapper(A) k1: K k2: K' nonce: Nonce) RS), Att' >
   < tlsWrapper(B) : TLSWrapper | trusted: false, Att''' >
@@ -82,6 +94,7 @@ rl [agentsConnected] :
   < tlsWrapper(B) : TLSWrapper | trusted: true, connected: A, Att''' >
   .
 
+--- An outgoing message is converted into TLSsend
 crl [outgoingMsg] :
   < tlsWrapper(A) : TLSWrapper | connected: B, world: {
     (msg M from A to B)
@@ -96,6 +109,7 @@ if
   (open A to B) in C or (open B to A) in C
   .
 
+--- A TLSrecv is converted to incoming message
 crl [incomingMsg] :
   < tlsWrapper(B) : TLSWrapper | connected: A, world: {
     C

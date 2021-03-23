@@ -1,13 +1,17 @@
 load state.maude
 load network.maude
 
+--- A wrapper that does nothing, used as a template for other wrappers
 mod BLANK_WRAPPER is
 pr NETWORK .
 pr STATE .
 
+--- We take the Oid of the client / server represented inside the wrapper as part of its identification
+--- This allows wrappers to find each other
 op blankWrapper : Oid -> Oid .
 op BlankWrapper : -> Cid .
 
+--- The world is a State stored in an attribute (see state.maude)
 op world:_ : State -> Attribute .
 
 vars A B O : Oid .
@@ -15,10 +19,15 @@ vars M : MessageContent .
 vars C C' : Configuration .
 vars Att Att' Att'' : AttributeSet .
 
+--- Check whether a configuration appears within another
 op _in_ : Configuration Configuration -> Bool .
 eq C in (C C') = true .
 eq C in C' = false [owise] .
 
+--- A request to open connection was seen inside the world
+--- If A tries to talk to B, we will open a wrapped connection in the outer world:
+--- blankWrapper(A) to blankWrapper(B)
+--- (And only do so if a connection does not exist yet)
 crl [clientInitiate] : {
   < blankWrapper(A) : BlankWrapper | world: {
     (open A to B)
@@ -38,6 +47,8 @@ if
   not (open blankWrapper(A) to blankWrapper(B)) in C'
   .
 
+--- If we see an incoming connection in the outer world (wrap(A) -> wrap(B) and we are B)
+--- Open the corresponding connection inside B's world
 crl [wrapperInitiate] :
   < blankWrapper(B) : BlankWrapper | world: {
     C
@@ -53,6 +64,8 @@ if
   not (open A to B) in C
   .
 
+--- If we see a message in A's world, pass it as a message to wrap(B)
+--- This also applies for B sending a message out to A
 crl [outgoingMsg] :
   < blankWrapper(A) : BlankWrapper | world: {
     (msg M from A to B)
@@ -67,6 +80,8 @@ if
   (open A to B) in C or (open B to A) in C
   .
 
+--- If we are wrap(B) and receive a message, pass it to the inner world
+--- This also applies for A receiving a message from B
 crl [incomingMsg] :
   < blankWrapper(B) : BlankWrapper | world: {
     C

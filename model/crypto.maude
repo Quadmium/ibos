@@ -1,3 +1,4 @@
+--- Shared sorts between modules
 mod CRYPTO_ANCESTOR is
 pr NAT .
 pr STRING .
@@ -18,6 +19,7 @@ subsorts Error Payload < DecryptionResult .
 op error : String -> Error [ctor] .
 endm
 
+--- Symmetric encryption
 mod SYMMETRIC is
 pr CRYPTO_ANCESTOR .
 
@@ -35,17 +37,14 @@ eq dec(enc(P, K), K) = P .
 eq dec(P, K) = error("Mismatched symmetric key OR unencrypted payload") [owise] .
 endm
 
+--- Asymmetric encryption
 mod ASYMMETRIC is
 pr CRYPTO_ANCESTOR .
 
 op privKey : Nat -> PrivKey [ctor] .
 op pubKey : Nat -> PubKey [ctor] .
 
---- In a pub key system we can enc with pub or priv
---- These numbers will identify agents using this (processes, users, etc)
---- Only owner has keypair, but public keys free to expose
-
---- Could have (PubKey PrivKey < Key) here and distinguish them since they are subsorts
+--- Standard encrypt, decrypt, sign, verify
 op enc : Payload PubKey -> Payload [ctor] .
 op dec : Payload PrivKey -> DecryptionResult [ctor] .
 
@@ -57,6 +56,8 @@ vars P : Payload .
 vars KPriv : PrivKey .
 vars KPub : PubKey .
 
+--- Flip is a two way map between PubKey and PrivKey
+--- By defining your own "flip", you can extend the model to support any kind of priv/pub key
 op flip : PubKey -> PrivKey .
 op flip : PrivKey -> PubKey .
 eq flip(pubKey(N)) = privKey(N) .
@@ -73,14 +74,18 @@ endm
 mod FIELD is
 pr CRYPTO_ANCESTOR .
 
+--- Sort for an exponent or a generator
 sorts Gen Exp GenORExp .
 subsorts Gen Exp < GenORExp .
 
+--- Field generator G
 op gen : -> Gen .
 
+--- Allow an exponent to be a key or payload
 subsort Exp < SymKey .
 subsort Exp < Payload .
 
+--- Represents a product of two nonces
 sort NonceMult .
 subsort Nonce < NonceMult .
 
@@ -89,6 +94,7 @@ op exp : GenORExp NonceMult -> Exp .
 
 vars G : Gen .
 vars NS NS' : NonceMult .
+--- Used for handshakes to establish shared secret
 eq exp(exp(G, NS), NS') = exp(G, NS * NS') .
 
 endm
@@ -99,6 +105,7 @@ inc SYMMETRIC .
 inc ASYMMETRIC .
 inc FIELD .
 
+--- standard mac and hash
 op mac : SymKey Payload -> Payload [ctor] .
 op hash : Nat Payload -> Payload [ctor] .
 
@@ -108,12 +115,15 @@ subsort Payload < SymKey .
 endm
 
 
+--- Crypto with object id as identity
 mod CRYPTO_OBJECTS is 
 pr CONFIGURATION .
 inc CRYPTO .
 
 vars O : Oid .
 
+--- Example for defining custom priv / pub key types
+--- Here we allow an object id to represent a key
 op privKey : Oid -> PrivKey [ctor] .
 op pubKey : Oid -> PubKey [ctor] .
 
