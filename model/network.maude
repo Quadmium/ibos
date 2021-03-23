@@ -1,0 +1,27 @@
+mod NETWORK is
+pr CONFIGURATION .
+pr STRING .
+
+sort MessageContent .
+subsort String < MessageContent .
+
+op open_to_ : Oid Oid -> Msg [ctor msg] .
+op msg_from_to_ : MessageContent Oid Oid -> Msg [ctor msg] .
+op close_to_ : Oid Oid -> Msg [ctor msg] .
+
+vars A B : Oid .
+
+rl [close] :
+  (open A to B)
+  (close A to B)
+=>
+  none
+  .
+
+vars M : Msg .
+rl [drop] :
+  M M
+=>
+  M
+  .
+endm

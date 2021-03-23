@@ -1,0 +1,6 @@
+mod STATE is
+pr CONFIGURATION .
+
+sort State .
+op {_} : Configuration -> State [ctor] .
+endm

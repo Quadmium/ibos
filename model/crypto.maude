@@ -1,0 +1,125 @@
+mod CRYPTO_ANCESTOR is
+pr NAT .
+pr STRING .
+
+--- This corresponds to message contents, not who to where
+sort Payload .
+
+sort SymKey PrivKey PubKey .
+
+sort Nonce .
+subsort Nonce < Payload .
+op nonce : Nat -> Nonce [ctor] .
+
+sort DecryptionResult .
+sort Error .
+subsorts Error Payload < DecryptionResult .
+
+op error : String -> Error [ctor] .
+endm
+
+mod SYMMETRIC is
+pr CRYPTO_ANCESTOR .
+
+--- Nat could be counter or nonce
+op symKey : Nat -> SymKey [ctor] .
+
+op enc : Payload SymKey -> Payload [ctor] .
+
+op dec : Payload SymKey -> DecryptionResult [ctor] .
+
+vars P : Payload .
+vars K K' : SymKey .
+
+eq dec(enc(P, K), K) = P .
+eq dec(P, K) = error("Mismatched symmetric key OR unencrypted payload") [owise] .
+endm
+
+mod ASYMMETRIC is
+pr CRYPTO_ANCESTOR .
+
+op privKey : Nat -> PrivKey [ctor] .
+op pubKey : Nat -> PubKey [ctor] .
+
+--- In a pub key system we can enc with pub or priv
+--- These numbers will identify agents using this (processes, users, etc)
+--- Only owner has keypair, but public keys free to expose
+
+--- Could have (PubKey PrivKey < Key) here and distinguish them since they are subsorts
+op enc : Payload PubKey -> Payload [ctor] .
+op dec : Payload PrivKey -> DecryptionResult [ctor] .
+
+op sign : Payload PrivKey -> Payload [ctor] .
+op verify : Payload PubKey -> DecryptionResult [ctor] .
+
+vars N : Nat .
+vars P : Payload .
+vars KPriv : PrivKey .
+vars KPub : PubKey .
+
+op flip : PubKey -> PrivKey .
+op flip : PrivKey -> PubKey .
+eq flip(pubKey(N)) = privKey(N) .
+eq flip(privKey(N)) = pubKey(N) .
+
+ceq dec(enc(P, KPub), KPriv) = P if KPriv == flip(KPub) .
+eq dec(P, KPriv) = error("Mismatched private key OR unencrypted payload") [owise] .
+
+ceq verify(sign(P, KPriv), KPub) = P if KPub == flip(KPriv) .
+eq verify(P, KPub) = error("Mismatched signing key or unencrypted payload") [owise] .
+
+endm
+
+mod FIELD is
+pr CRYPTO_ANCESTOR .
+
+sorts Gen Exp GenORExp .
+subsorts Gen Exp < GenORExp .
+
+op gen : -> Gen .
+
+subsort Exp < SymKey .
+subsort Exp < Payload .
+
+sort NonceMult .
+subsort Nonce < NonceMult .
+
+op _*_ : NonceMult NonceMult -> NonceMult [assoc comm] .
+op exp : GenORExp NonceMult -> Exp .
+
+vars G : Gen .
+vars NS NS' : NonceMult .
+eq exp(exp(G, NS), NS') = exp(G, NS * NS') .
+
+endm
+
+mod CRYPTO is
+
+inc SYMMETRIC .
+inc ASYMMETRIC .
+inc FIELD .
+
+op mac : SymKey Payload -> Payload [ctor] .
+op hash : Nat Payload -> Payload [ctor] .
+
+subsort String < Payload .
+subsort Payload < SymKey .
+
+endm
+
+
+mod CRYPTO_OBJECTS is 
+pr CONFIGURATION .
+inc CRYPTO .
+
+vars O : Oid .
+
+op privKey : Oid -> PrivKey [ctor] .
+op pubKey : Oid -> PubKey [ctor] .
+
+eq flip(pubKey(O)) = privKey(O) .
+eq flip(privKey(O)) = pubKey(O) .
+
+op nonce : Oid Nat -> Nonce [ctor] .
+
+endm

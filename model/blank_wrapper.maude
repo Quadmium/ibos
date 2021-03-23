@@ -1,0 +1,85 @@
+load state.maude
+load network.maude
+
+mod BLANK_WRAPPER is
+pr NETWORK .
+pr STATE .
+
+op blankWrapper : Oid -> Oid .
+op BlankWrapper : -> Cid .
+
+op world:_ : State -> Attribute .
+
+vars A B O : Oid .
+vars M : MessageContent .
+vars C C' : Configuration .
+vars Att Att' Att'' : AttributeSet .
+
+op _in_ : Configuration Configuration -> Bool .
+eq C in (C C') = true .
+eq C in C' = false [owise] .
+
+crl [clientInitiate] : {
+  < blankWrapper(A) : BlankWrapper | world: {
+    (open A to B)
+    C
+  }, Att >
+  C'
+}
+=> {
+  < blankWrapper(A) : BlankWrapper | world: {
+    (open A to B)
+    C
+  }, Att >
+  (open blankWrapper(A) to blankWrapper(B))
+  C'
+}
+if
+  not (open blankWrapper(A) to blankWrapper(B)) in C'
+  .
+
+crl [wrapperInitiate] :
+  < blankWrapper(B) : BlankWrapper | world: {
+    C
+  }, Att >
+  (open blankWrapper(A) to blankWrapper(B))
+=>
+  < blankWrapper(B) : BlankWrapper | world: {
+    C
+    (open A to B)
+  }, Att >
+  (open blankWrapper(A) to blankWrapper(B))
+if
+  not (open A to B) in C
+  .
+
+crl [outgoingMsg] :
+  < blankWrapper(A) : BlankWrapper | world: {
+    (msg M from A to B)
+    C
+  }, Att >
+=>
+  < blankWrapper(A) : BlankWrapper | world: {
+    C
+  }, Att >
+  (msg M from blankWrapper(A) to blankWrapper(B))
+if
+  (open A to B) in C or (open B to A) in C
+  .
+
+crl [incomingMsg] :
+  < blankWrapper(B) : BlankWrapper | world: {
+    C
+  }, Att >
+  (msg M from blankWrapper(A) to blankWrapper(B))
+=>
+  < blankWrapper(B) : BlankWrapper | world: {
+    (msg M from A to B)
+    C
+  }, Att >
+if
+  (open A to B) in C or (open B to A) in C
+  .
+
+--- TODO: closing
+endm
