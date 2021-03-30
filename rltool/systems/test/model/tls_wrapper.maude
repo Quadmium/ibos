@@ -19,10 +19,6 @@ vars M : MessageContent .
 vars C C' : Configuration .
 vars Att Att' Att'' Att''' : AttributeSet .
 
-op _in_ : Configuration Configuration -> Bool .
-eq C in (C C') = true .
-eq C in C' = false [owise] .
-
 vars IS : InitSessions .
 vars RS : RespSessions .
 
@@ -30,6 +26,7 @@ vars K K' : Payload .
 vars T : Payload .
 vars Nonce : Nonce .
 
+--- Has a connection been established with given Oid?
 op isTrusted : Oid InitSessions -> Bool .
 eq isTrusted(A, ((trusted: A k1: K k2: K' nonce: Nonce) IS)) = true .
 eq isTrusted(A, IS) = false [owise] .
@@ -40,10 +37,11 @@ eq isTrusted(A, RS) = false [owise] .
 
 vars ST : State .
 
+--- Used to simplify creation of tls wrappers, just need Oid and world
 op createTLSWrapper : Oid State -> Configuration .
 eq createTLSWrapper(A, ST) = < tlsWrapper(A) : TLSAgent | world: ST, nextNonce: 0, initSessions: emptySession, respSessions: emptySession > .
 
---- An outgoing message is converted into TLSsend
+--- An outgoing message is converted into TLSsend if there is a connection
 crl [outgoingMsg] :
   < tlsWrapper(A) : TLSAgent | respSessions: RS, initSessions: IS, world: {
     (msg M from A to B)
@@ -58,6 +56,7 @@ if
   isTrusted(tlsWrapper(B), IS) or isTrusted(tlsWrapper(B), RS)
   .
 
+--- An outgoing message adds notInititated if there is no connection, and does so only once
 crl [outgoingMsgNotInit] :
   < tlsWrapper(A) : TLSAgent | respSessions: RS, initSessions: IS, world: {
     (msg M from A to B)
@@ -72,7 +71,7 @@ if
   not tlsWrapper(B) inSession RS and not tlsWrapper(B) inSession IS
   .
 
---- A TLSrecv is converted to incoming message
+--- A TLSrecv is converted to incoming message, if trusted
 crl [incomingMsg] :
   < tlsWrapper(B) : TLSAgent | respSessions: RS, initSessions: IS, world: {
     C

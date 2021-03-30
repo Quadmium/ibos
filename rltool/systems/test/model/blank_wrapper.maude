@@ -19,11 +19,6 @@ vars M : MessageContent .
 vars C C' : Configuration .
 vars Att Att' Att'' : AttributeSet .
 
---- Check whether a configuration appears within another
-op _in_ : Configuration Configuration -> Bool .
-eq C in (C C') = true .
-eq C in C' = false [owise] .
-
 --- If we see a message in A's world, pass it as a message to wrap(B)
 --- This also applies for B sending a message out to A
 rl [outgoingMsg] :
@@ -52,5 +47,4 @@ rl [incomingMsg] :
   }, Att >
 .
 
---- TODO: closing
 endm

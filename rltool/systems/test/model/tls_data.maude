@@ -2,6 +2,7 @@ load crypto.maude
 load network.maude
 
 --- Logic for TLS handshake and data transfer
+--- Can be used independently of wrappers (to do attacker analysis)
 mod TLS is
 pr CRYPTO_OBJECTS .
 pr NETWORK .
@@ -191,6 +192,15 @@ if
   Nonce ; PL' := dec(PL, K')
   .
 
+--- Drop duplicates
+var MSG : Msg .
+eq MSG MSG = MSG .
+
+endm
+
+mod TLSDEMO is 
+pr TLS .
+
 --- Demo
 subsort String < Oid .
 
@@ -208,9 +218,5 @@ rl [BRespond] :
 =>
   (TLSsend "reply" from "B" to "A")
   .
-
---- Drop duplicates
-var MSG : Msg .
-eq MSG MSG = MSG .
 
 endm

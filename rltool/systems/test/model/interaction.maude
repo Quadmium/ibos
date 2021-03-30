@@ -76,8 +76,8 @@ pr TLS_WRAPPER .
 subsort String < Oid .
 
 --- No wrappers, just A to B
-op start : -> State [ctor] .
-eq start = {
+op start1 : -> State [ctor] .
+eq start1 = {
     < "A" : Client | cstate: sending, target: "B", read: "" >
     < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
   }
@@ -152,13 +152,34 @@ op start6 : -> State [ctor] .
 eq start6 = {
     createTLSWrapper(tlsWrapper("A"), {
       createTLSWrapper("A", {
-      < "A" : Client | cstate: sending, target: "B", read: "" >
+        < "A" : Client | cstate: sending, target: "B", read: "" >
       })
     })
 
     createTLSWrapper(tlsWrapper("B"), {
       createTLSWrapper("B", {
         < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+      })
+    })
+  }
+  .
+
+--- Double Nested TLS wrappers
+op start6double : -> State [ctor] .
+eq start6double = {
+    createTLSWrapper(tlsWrapper(tlsWrapper("A")), {
+      createTLSWrapper(tlsWrapper("A"), {
+        createTLSWrapper("A", {
+          < "A" : Client | cstate: sending, target: "B", read: "" >
+        })
+      })
+    })
+
+    createTLSWrapper(tlsWrapper(tlsWrapper("B")), {
+      createTLSWrapper(tlsWrapper("B"), {
+        createTLSWrapper("B", {
+          < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+        })
       })
     })
   }
