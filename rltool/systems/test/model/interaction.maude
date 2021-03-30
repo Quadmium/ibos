@@ -18,20 +18,12 @@ op Client : -> Cid [ctor] .
 op target:_ : Oid -> Attribute [ctor] .
 
 sort ClientState .
-ops opening sending waiting : -> ClientState [ctor] .
+ops sending waiting : -> ClientState [ctor] .
 op cstate:_ : ClientState -> Attribute [ctor] .
-op read:_ : String -> Attribute [ctor] .
 
 vars A B : Oid .
 vars Att : AttributeSet .
 vars S S' : String .
-
-rl [inititate] :
-  < A : Client | cstate: opening, target: B, Att >
-=>
-  < A : Client | cstate: sending, target: B, Att >
-  (open A to B)
-  .
 
 rl [send] :
   < A : Client | cstate: sending, target: B, Att >
@@ -42,10 +34,8 @@ rl [send] :
 
 rl [read] :
   < A : Client | cstate: waiting, read: S, Att >
-  (open A to B)
   (msg S' from B to A)
 =>
-  (open A to B)
   < A : Client | cstate: waiting, read: (S + S'), Att >
   .
 endm
@@ -66,11 +56,9 @@ vars S S' : String .
 
 rl [read] :
   < B : Server | sstate: waiting, read: S, Att >
-  (open A to B)
   (msg S' from A to B)
 =>
   < B : Server | sstate: waiting, read: (S + S'), Att >
-  (open A to B)
   (msg "ServerReply" from B to A)
   .
 endm
@@ -89,7 +77,7 @@ subsort String < Oid .
 --- No wrappers, just A to B
 op start : -> State [ctor] .
 eq start = {
-    < "A" : Client | cstate: opening, target: "B", read: "" >
+    < "A" : Client | cstate: sending, target: "B", read: "" >
     < "B" : Server | sstate: waiting, read: "" >
   }
   .
@@ -98,7 +86,7 @@ eq start = {
 op start2 : -> State [ctor] .
 eq start2 = {
     < blankWrapper("A") : BlankWrapper | world: {
-      < "A" : Client | cstate: opening, target: "B", read: "" >
+      < "A" : Client | cstate: sending, target: "B", read: "" >
     } >
     
     < blankWrapper("B") : BlankWrapper | world: {
@@ -112,7 +100,7 @@ op start3 : -> State [ctor] .
 eq start3 = {
     < blankWrapper(blankWrapper("A")) : BlankWrapper | world: {
       < blankWrapper("A") : BlankWrapper | world: {
-        < "A" : Client | cstate: opening, target: "B", read: "" >
+        < "A" : Client | cstate: sending, target: "B", read: "" >
       } >
     } >
     
@@ -129,13 +117,13 @@ eq start3 = {
 --- The TLS wrapper
 op start4 : -> State [ctor] .
 eq start4 = {
-    < tlsWrapper("A") : TLSWrapper | trusted: false, world: {
-      < "A" : Client | cstate: opening, target: "B", read: "" >
-    } >
+    createTLSWrapper("A", {
+      < "A" : Client | cstate: sending, target: "B", read: "" >
+    })
     
-    < tlsWrapper("B") : TLSWrapper | trusted: false, world: {
+    createTLSWrapper("B", {
       < "B" : Server | sstate: waiting, read: "" >
-    } >
+    })
   }
   .
 
@@ -143,16 +131,16 @@ eq start4 = {
 op start5 : -> State [ctor] .
 eq start5 = {
     < blankWrapper(tlsWrapper("A")) : BlankWrapper | world: {
-      < tlsWrapper("A") : TLSWrapper | trusted: false, world: {
-        < "A" : Client | cstate: opening, target: "B", read: "" >
-      } >
+      createTLSWrapper("A", {
+        < "A" : Client | cstate: sending, target: "B", read: "" >
+      })
     } >
     
     
     < blankWrapper(tlsWrapper("B")) : BlankWrapper | world: {
-      < tlsWrapper("B") : TLSWrapper | trusted: false, world: {
+      createTLSWrapper("B", {
         < "B" : Server | sstate: waiting, read: "" >
-      } >
+      })
     } >
     
   }
@@ -161,19 +149,17 @@ eq start5 = {
 --- Nested TLS wrappers
 op start6 : -> State [ctor] .
 eq start6 = {
-    < tlsWrapper(tlsWrapper("A")) : TLSWrapper | trusted: false, world: {
-      < tlsWrapper("A") : TLSWrapper | trusted: false, world: {
-        < "A" : Client | cstate: opening, target: "B", read: "" >
-      } >
-    } >
-    
-    
-    < tlsWrapper(tlsWrapper("B")) : TLSWrapper | trusted: false, world: {
-      < tlsWrapper("B") : TLSWrapper | trusted: false, world: {
+    createTLSWrapper(tlsWrapper("A"), {
+      createTLSWrapper("A", {
+      < "A" : Client | cstate: sending, target: "B", read: "" >
+      })
+    })
+
+    createTLSWrapper(tlsWrapper("B"), {
+      createTLSWrapper("B", {
         < "B" : Server | sstate: waiting, read: "" >
-      } >
-    } >
-    
+      })
+    })
   }
   .
 endm

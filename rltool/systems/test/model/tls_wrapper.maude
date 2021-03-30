@@ -10,16 +10,9 @@ pr STATE .
 pr TLS .
 
 op tlsWrapper : Oid -> Oid .
-op TLSWrapper : -> Cid .
 
 --- Contained client/server
 op world:_ : State -> Attribute .
-
---- Do we trust the connection yet?
-op trusted:_ : Bool -> Attribute .
-
---- Who are we connected to?
-op connected:_ : Oid -> Attribute .
 
 vars A B O : Oid .
 vars M : MessageContent .
@@ -37,92 +30,60 @@ vars K K' : Payload .
 vars T : Payload .
 vars Nonce : Nonce .
 
---- When initiating, also create an Agent
---- The two agents will authenticate, and then give us the go-ahead to use them to send more data
-crl [clientInitiate] : {
-  < tlsWrapper(A) : TLSWrapper | world: {
-    (open A to B)
-    C
-  }, Att >
-  C'
-}
-=> {
-  < tlsWrapper(A) : TLSWrapper | world: {
-    (open A to B)
-    C
-  }, Att >
-  (open tlsWrapper(A) to tlsWrapper(B))
-  < tlsWrapper(A) : Agent | nextNonce: 0, initSessions: notInitiated(tlsWrapper(B)), respSessions: emptySession >
-  C'
-}
-if
-  not (open tlsWrapper(A) to tlsWrapper(B)) in C'
-  .
+op isTrusted : Oid InitSessions -> Bool .
+eq isTrusted(A, ((trusted: A k1: K k2: K' nonce: Nonce) IS)) = true .
+eq isTrusted(A, IS) = false [owise] .
 
---- This creates the other agent
-crl [wrapperInitiate] :
-  < tlsWrapper(B) : TLSWrapper | world: {
-    C
-  }, Att >
-  (open tlsWrapper(A) to tlsWrapper(B))
-=>
-  < tlsWrapper(B) : TLSWrapper | world: {
-    C
-    (open A to B)
-  }, Att >
-  (open tlsWrapper(A) to tlsWrapper(B))
-  < tlsWrapper(B) : Agent | nextNonce: 0, initSessions: emptySession, respSessions: emptySession >
-if
-  not (open A to B) in C
-  .
+op isTrusted : Oid RespSessions -> Bool .
+eq isTrusted(A, ((trusted: A k1: K k2: K' nonce: Nonce) RS)) = true .
+eq isTrusted(A, RS) = false [owise] .
 
---- Once agent has trusted the other, we can mark it down and allow sending messages
-rl [agentsConnected] :
-  < tlsWrapper(A) : Agent | initSessions: ((trusted: tlsWrapper(B) k1: K k2: K' nonce: Nonce) IS), Att >
-  < tlsWrapper(A) : TLSWrapper | trusted: false, Att'' >
-=>
-  < tlsWrapper(A) : Agent | initSessions: ((trusted: tlsWrapper(B) k1: K k2: K' nonce: Nonce) IS), Att >
-  < tlsWrapper(A) : TLSWrapper | trusted: true, connected: B, Att'' >
-  .
+vars ST : State .
 
---- Need to do this for both agents
-rl [agentsConnected] :
-  < tlsWrapper(B) : Agent | respSessions: ((trusted: tlsWrapper(A) k1: K k2: K' nonce: Nonce) RS), Att' >
-  < tlsWrapper(B) : TLSWrapper | trusted: false, Att''' >
-=>
-  < tlsWrapper(B) : Agent | respSessions: ((trusted: tlsWrapper(A) k1: K k2: K' nonce: Nonce) RS), Att' >
-  < tlsWrapper(B) : TLSWrapper | trusted: true, connected: A, Att''' >
-  .
+op createTLSWrapper : Oid State -> Configuration .
+eq createTLSWrapper(A, ST) = < tlsWrapper(A) : TLSAgent | world: ST, nextNonce: 0, initSessions: emptySession, respSessions: emptySession > .
 
 --- An outgoing message is converted into TLSsend
 crl [outgoingMsg] :
-  < tlsWrapper(A) : TLSWrapper | connected: B, world: {
+  < tlsWrapper(A) : TLSAgent | respSessions: RS, initSessions: IS, world: {
     (msg M from A to B)
     C
   }, Att >
 =>
-  < tlsWrapper(A) : TLSWrapper | connected: B, world: {
+  < tlsWrapper(A) : TLSAgent | respSessions: RS, initSessions: IS, world: {
     C
   }, Att >
-  (TLSsend tlsWrapper(A) msg M)
+  (TLSsend M from tlsWrapper(A) to tlsWrapper(B))
 if
-  (open A to B) in C or (open B to A) in C
+  isTrusted(tlsWrapper(B), IS) or isTrusted(tlsWrapper(B), RS)
+  .
+
+crl [outgoingMsgNotInit] :
+  < tlsWrapper(A) : TLSAgent | respSessions: RS, initSessions: IS, world: {
+    (msg M from A to B)
+    C
+  }, Att >
+=>
+  < tlsWrapper(A) : TLSAgent | respSessions: RS, initSessions: (notInitiated(tlsWrapper(B)) IS), world: {
+    (msg M from A to B)
+    C
+  }, Att >
+if
+  not tlsWrapper(B) inSession RS and not tlsWrapper(B) inSession IS
   .
 
 --- A TLSrecv is converted to incoming message
 crl [incomingMsg] :
-  < tlsWrapper(B) : TLSWrapper | connected: A, world: {
+  < tlsWrapper(B) : TLSAgent | respSessions: RS, initSessions: IS, world: {
     C
   }, Att >
-  (TLSrecv tlsWrapper(B) msg M)
+  (TLSrecv M from tlsWrapper(A) to tlsWrapper(B))
 =>
-  < tlsWrapper(B) : TLSWrapper | connected: A, world: {
+  < tlsWrapper(B) : TLSAgent | respSessions: RS, initSessions: IS, world: {
     (msg M from A to B)
     C
   }, Att >
 if
-  (open A to B) in C or (open B to A) in C
+  isTrusted(tlsWrapper(A), IS) or isTrusted(tlsWrapper(A), RS)
   .
-
---- TODO: closing
 endm
