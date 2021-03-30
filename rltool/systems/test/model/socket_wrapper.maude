@@ -1,0 +1,320 @@
+load state.maude
+load network.maude
+load socket_mock.maude
+
+mod CLIENT is
+pr CONFIGURATION .
+pr SOCKET .
+
+vars N N' N'' N''' Port : Nat .
+vars Address S S' Rest : String .
+vars Config : Configuration .
+vars Me CM SocketName : Oid .
+vars Att : AttributeSet .
+
+op createClient : String Nat -> Msg [ctor msg] .
+
+op client : Nat -> Oid [ctor] .
+op Client : -> Cid [ctor] .
+
+op clientManager : -> Oid [ctor] .
+op ClientManager : -> Cid [ctor] .
+
+op nextNumber:_ : Nat -> Attribute [ctor] .
+
+sort ClientState .
+ops initial connecting sendingWebsiteMsg readingWebsiteMsg : -> ClientState [ctor] .
+
+op state:_ : ClientState -> Attribute [ctor] .
+op address:_ : String -> Attribute [ctor] .
+op port:_ : Nat -> Attribute [ctor] .
+op socketName:_ : Oid -> Attribute [ctor] .
+op read:_ : String -> Attribute [ctor] .
+
+op clientManagerInConfig : Configuration -> Bool .
+eq clientManagerInConfig(< CM : ClientManager | Att > Config) = true .
+eq clientManagerInConfig(Config) = false [owise] .
+
+crl [createClientManager] :
+  { <> Config }
+=>
+  {
+    <>
+    Config
+    < clientManager : ClientManager | nextNumber: 0 >
+  }
+if
+  not clientManagerInConfig(Config)
+  .
+
+rl [createClient] :
+  createClient(Address, Port)
+  < CM : ClientManager | nextNumber: N, Att >
+=>
+  < client(N) : Client | state: initial, address: Address, port: Port, read: "" >
+  < CM : ClientManager | nextNumber: s(N), Att >
+  .
+
+rl [receive] :
+  < Me : Client | socketName: SocketName, read: S, Att >
+  received(Me, SocketName, S')
+=>
+  < Me : Client | socketName: SocketName, read: (S + S'), Att >
+  receive(SocketName, Me)
+  .
+
+rl [sent] :
+  < Me : Client | socketName: SocketName, Att >
+  sent(Me, SocketName)
+=>
+  < Me : Client | socketName: SocketName, Att >
+  .
+
+rl [connectToServer] :
+  < Me : Client | state: initial, address: Address, port: Port, Att >
+=>
+  createClientTcpSocket(socketManager, Me, Address, Port)
+  < Me : Client | state: connecting, address: Address, port: Port, Att >
+  .
+
+rl [connectedToServer] :
+  < Me : Client | state: connecting, Att >
+  createdSocket(Me, socketManager, SocketName)
+=>
+  < Me : Client | state: sendingWebsiteMsg, socketName: SocketName, Att >
+  receive(SocketName, Me)
+  .
+
+rl [sendWebsiteMsg] : 
+  < Me : Client | state: sendingWebsiteMsg, socketName: SocketName, Att >
+=>
+  send(SocketName, Me, "Client hello")
+  < Me : Client | state: readingWebsiteMsg, socketName: SocketName, Att >
+  .
+endm
+
+mod SERVER is
+pr CONFIGURATION .
+pr SOCKET .
+
+vars N N' N'' N''' Port : Nat .
+vars Address S S' Rest : String .
+vars Config : Configuration .
+vars Me CM SocketName SocketName' : Oid .
+vars Att : AttributeSet .
+
+op createServer : String Nat -> Msg [ctor msg] .
+
+op server : Nat -> Oid [ctor] .
+op Server : -> Cid [ctor] .
+
+op nextNumber:_ : Nat -> Attribute [ctor] .
+
+sort ServerState .
+ops initial connecting accepting sendingWebsiteMsg readingWebsiteMsg : -> ServerState [ctor] .
+
+op state:_ : ServerState -> Attribute [ctor] .
+op reply:_ : String -> Attribute [ctor] .
+op port:_ : Nat -> Attribute [ctor] .
+op socketName:_ : Oid -> Attribute [ctor] .
+op read:_ : String -> Attribute [ctor] .
+
+op serverManager : -> Oid [ctor] .
+op ServerManager : -> Cid [ctor] .
+
+op serverManagerInConfig : Configuration -> Bool .
+eq serverManagerInConfig(< CM : ServerManager | Att > Config) = true .
+eq serverManagerInConfig(Config) = false [owise] .
+
+crl [createServerManager] :
+  { <> Config }
+=>
+  {
+    <>
+    Config
+    < serverManager : ServerManager | nextNumber: 0 >
+  }
+if
+  not serverManagerInConfig(Config)
+  .
+
+rl [createServer] :
+  createServer(Rest, Port)
+  < CM : ServerManager | nextNumber: N, Att >
+=>
+  < server(N) : Server | state: initial, reply: Rest, port: Port, read: "" >
+  < CM : ServerManager | nextNumber: s(N), Att >
+  .
+
+rl [receive] :
+  < Me : Server | socketName: SocketName, reply: Rest, read: S, Att >
+  received(Me, SocketName, S')
+=>
+  < Me : Server | socketName: SocketName, reply: Rest, read: (S + S'), Att >
+  send(SocketName, Me, Rest)
+  .
+
+rl [sent] :
+  < Me : Server | socketName: SocketName, Att >
+  sent(Me, SocketName)
+=>
+  < Me : Server | socketName: SocketName, Att >
+  .
+
+rl [createServer] :
+  < Me : Server | state: initial, port: Port, Att >
+=>
+  createServerTcpSocket(socketManager, Me, Port, 5)
+  < Me : Server | state: connecting, port: Port, Att >
+  .
+
+rl [connectedToServer] :
+  < Me : Server | state: connecting, Att >
+  createdSocket(Me, socketManager, SocketName)
+=>
+  < Me : Server | state: accepting, Att >
+  acceptClient(SocketName, Me)
+  .
+
+rl [acceptedClient] :
+  < Me : Server | state: accepting, Att >
+  acceptedClient(Me, SocketName', Address, SocketName)
+=>
+  < Me : Server | state: sendingWebsiteMsg, socketName: SocketName, Att >
+  receive(SocketName, Me)
+  .
+endm
+
+mod SOCKET_WRAPPER is
+pr NETWORK .
+pr STATE .
+pr SOCKET .
+pr SERVER .
+
+--- We take the Oid of the client / server represented inside the wrapper as part of its identification
+--- This allows wrappers to find each other
+op socketWrapper : Oid -> Oid .
+op clientID : Oid -> Oid .
+op serverID : String Nat -> Oid .
+op SocketWrapper : -> Cid .
+
+--- The world is a State stored in an attribute (see state.maude)
+op world:_ : State -> Attribute .
+
+op connected:_ : Oid -> Attribute .
+
+vars A B SM Me SocketName SocketName' O : Oid .
+vars M : MessageContent .
+
+vars Att Att' Att'' Att''' : AttributeSet .
+
+vars C C' : Configuration .
+
+vars S S' Address : String .
+vars N N' Port : Nat .
+
+--- Check whether a configuration appears within another
+op _in_ : Configuration Configuration -> Bool .
+eq C in (C C') = true .
+eq C in C' = false [owise] .
+
+--- A request to open connection was seen inside the world
+--- If A tries to talk to B, we will open a wrapped connection in the outer world:
+--- socketWrapper(A) to socketWrapper(B)
+--- (And only do so if a connection does not exist yet)
+crl [clientInitiate] : {
+  < socketWrapper(clientID(A)) : SocketWrapper | world: {
+    createClientTcpSocket(socketManager, A, Address, Port)
+    C
+  }, Att >
+  C'
+}
+=> {
+  < socketWrapper(clientID(A)) : SocketWrapper | world: {
+    C
+    (open clientID(A) to B)
+    createdSocket(A, socketManager, socket(1))
+  }, connected: B, Att >
+  (open socketWrapper(clientID(A)) to socketWrapper(B))
+  C'
+}
+if
+  B := serverID(Address, Port) /\
+  not (open socketWrapper(clientID(A)) to socketWrapper(B)) in C'
+  .
+
+--- If we see an incoming connection in the outer world (wrap(A) -> wrap(B) and we are B)
+--- Open the corresponding connection inside B's world
+crl [wrapperInitiate] :
+  < socketWrapper(B) : SocketWrapper | world: {
+    C
+  }, Att >
+  (open socketWrapper(clientID(A)) to socketWrapper(B))
+=>
+  < socketWrapper(B) : SocketWrapper | world: {
+    C
+    (open clientID(A) to B)
+    createClientTcpSocket(socketManager, clientID(A), Address, Port)
+  }, connected: A, Att >
+  (open socketWrapper(clientID(A)) to socketWrapper(B))
+if
+  serverID(Address, Port) := B /\
+  not (open clientID(A) to B) in C
+  .
+
+--- If we see a message in A's world, pass it as a message to wrap(B)
+--- This also applies for B sending a message out to A
+crl [outgoingMsg] :
+  < socketWrapper(A) : SocketWrapper | connected: B, world: {
+    send(SocketName, O, S)
+    C
+  }, Att >
+=>
+  < socketWrapper(A) : SocketWrapper | connected: B, world: {
+    C
+  }, Att >
+  (msg S from socketWrapper(A) to socketWrapper(B))
+if
+  (open A to B) in C or (open B to A) in C
+  .
+
+--- If we are wrap(B) and receive a message, pass it to the inner world
+--- This also applies for A receiving a message from B
+crl [incomingMsg] :
+  < socketWrapper(B) : SocketWrapper | world: {
+    C
+  }, Att >
+  (msg M from socketWrapper(A) to socketWrapper(B))
+=>
+  < socketWrapper(B) : SocketWrapper | world: {
+    (msg M from A to B)
+    received(server(0), socket(2), M)
+    C
+  }, Att >
+if
+  (open A to B) in C or (open B to A) in C
+  .
+
+--- TODO: closing
+endm
+
+mod TEST is
+pr CLIENT .
+pr SERVER .
+
+pr SOCKET_WRAPPER .
+
+subsort String < Oid .
+
+op sockstart : -> State .
+eq sockstart = {
+    <>
+    < socketWrapper(clientID(client(0))) : SocketWrapper | world: { <> createClient("127.0.0.1", 1234) } >
+    < socketWrapper(serverID("127.0.0.1", 1234)) : SocketWrapper | world: { <> createServer("Server Reply", 1234) } >
+
+    ---createServer("Server Reply", 1234)
+    ---createClient("127.0.0.1", 1234)
+  }
+  .
+
+endm

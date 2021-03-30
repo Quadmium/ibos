@@ -1,0 +1,356 @@
+load state.maude
+
+mod SOCKET is
+pr STATE .
+pr STRING .
+pr CONVERSION .
+inc CONFIGURATION .
+
+op socket : Nat -> Oid [ctor] .
+
+op createClientTcpSocket : Oid Oid String Nat -> Msg [ctor msg format (b o)] .
+op createServerTcpSocket : Oid Oid Nat Nat -> Msg [ctor msg format (b o)] .
+op createdSocket : Oid Oid Oid -> Msg [ctor msg format (m o)] .
+
+op acceptClient : Oid Oid -> Msg [ctor msg format (b o)] .
+op acceptedClient : Oid Oid String Oid -> Msg [ctor msg format (m o)] .
+
+op send : Oid Oid String -> Msg [ctor msg format (b o)] .
+op sent : Oid Oid -> Msg [ctor msg format (m o)] .
+
+op receive : Oid Oid -> Msg [ctor msg format (b o)] .
+op received : Oid Oid String -> Msg [ctor msg format (m o)] .
+
+op closeSocket : Oid Oid -> Msg [ctor msg format (b o)] .
+op closedSocket : Oid Oid String -> Msg [ctor msg format (m o)] .
+
+op socketError : Oid Oid String -> Msg [ctor msg format (r o)] .
+
+--- Set for socket connections
+
+sort Connection ConnectionSet .
+subsorts Connection < ConnectionSet .
+
+vars C : Connection .
+vars CS CS' : ConnectionSet .
+
+var Config : Configuration .
+vars SM Me Me' : Oid .
+vars Address S S' Buffer Buffer' Delim Data Rest : String .
+vars Port Backlog N N' SockNum : Nat .
+vars Att : AttributeSet .
+vars B : Bool .
+
+--- Sending socket, receiving socket, buffer for receiving
+op connectionFromTo : Nat Nat String -> Connection [ctor] .
+
+--- sock(N) Address Port ResponseBuffer
+--- TODO(vijaygk2): Consider Nat -> Socket wdyt?
+op externalConnectionFromTo : Nat String Nat String -> Connection [ctor] .
+
+op mtCS : -> ConnectionSet [ctor] .
+op _,_ : ConnectionSet ConnectionSet -> ConnectionSet [ctor assoc comm id: mtCS] .
+
+op _in_ : Connection ConnectionSet -> Bool .
+eq C in (C, CS) = true .
+eq C in CS = false [owise] .
+
+op containsConnectionWith : Nat ConnectionSet -> Bool .
+
+eq containsConnectionWith(N, (connectionFromTo(N, N', Buffer), CS)) = true .
+eq containsConnectionWith(N, (connectionFromTo(N', N, Buffer), CS)) = true .
+eq containsConnectionWith(N, (externalConnectionFromTo(N, Address, Port, Buffer), CS)) = true .
+eq containsConnectionWith(N, CS) = false [owise] .
+
+--- Set for local server info
+sorts LocalServer LocalServerSet .
+subsorts LocalServer < LocalServerSet .
+
+vars LS : LocalServer .
+vars LSS : LocalServerSet .
+
+--- socket(N), port
+op localServer : Nat Nat -> LocalServer [ctor] .
+
+op mtLSS : -> LocalServerSet [ctor] .
+op _,_ : LocalServerSet LocalServerSet -> LocalServerSet [ctor assoc comm id: mtLSS] .
+
+op socketManager : -> Oid [ctor] .
+op SocketManager : -> Cid [ctor] .
+
+op nextNumber:_ : Nat -> Attribute [ctor] .
+
+op connections:_ : ConnectionSet -> Attribute [ctor] .
+op localServers:_ : LocalServerSet -> Attribute [ctor] .
+
+op isLocal : String -> Bool .
+eq isLocal(S) = (S == "127.0.0.1") .
+
+op socketManagerInConfig : Configuration -> Bool .
+eq socketManagerInConfig(< SM : SocketManager | Att > Config) = true .
+eq socketManagerInConfig(Config) = false [owise] .
+
+--- debug
+
+---op start : -> Msg [ctor] .
+---op me : -> Oid [ctor] .
+---op me' : -> Oid [ctor] .
+
+--- search start =>* X:Configuration s.t. not I(X:Configuration) .
+***(
+rl [start] :
+  start
+=>
+  < socketManager : SocketManager | 
+    nextNumber: 0, 
+    connections: mtCS,
+    localServers: mtLSS >
+  --- createServerTcpSocket(socketManager, me, 25123, 5)
+  --- createClientTcpSocket(socketManager, me, "127.0.0.1", 25123)
+  
+  --- createClientTcpSocket(socketManager, me, "127.0.0.2", 25123)
+  --- createClientTcpSocket(socketManager, me, "127.0.0.3", 25124)
+  --- send(socket(1), me, "sup")
+  --- send(socket(0), me, "hello")
+  --- receive(socket(1), me)
+  --- receive(socket(0), me)
+
+  createServerTcpSocket(socketManager, me, 25123, 5)
+  acceptClient(socket(0), me)
+  createClientTcpSocket(socketManager, me', "127.0.0.1", 25123)
+  .
+
+rl [start2] :
+  acceptedClient(me, socket(0), "127.0.0.1", socket(2))
+=>
+  send(socket(1), me', "hi1")
+  receive(socket(2), me)
+  send(socket(2), me, "hi2")
+  receive(socket(1), me)
+  .
+
+
+op untilDelim : String String -> String .
+op afterDelim : String String -> String .
+
+ceq untilDelim(S, Delim) = Data if 
+  N    := find(S, Delim, 0) /\
+  Data := substr(S, 0, N) .
+
+ceq afterDelim(S, Delim) = Data if 
+  N    := find(S, Delim, 0) /\
+  Data := substr(S, N + 1, length(S)) .
+
+op isBufferFullOf : String String -> Bool .
+
+eq isBufferFullOf("", S) = true .
+ceq isBufferFullOf(S, S') =
+  Data == S' and isBufferFullOf(Rest, S')
+if
+  Data := untilDelim(S, "#") /\
+  Rest := afterDelim(S, "#") /\
+  length(S) > 0
+  . 
+
+op I : Configuration -> Bool .
+
+eq I(
+  received(Me, socket(N), S) 
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
+    Att >
+  Config) = isBufferFullOf(S,  Address + ":" + string(Port, 10)) and I(Config) .
+
+eq I(Config) = true [owise] .
+)
+--- end debug
+
+--- Create the socket manager if not exist
+--- By wrapping configuration in { } ("State"), we prevent partial matches i.e.
+--- A socket manager will always be created if we just matched Config, since maude can
+--- match any sub-config without the socket manager and apply the rule.
+--- This allows us to check something on the global state, but means we have to start our 
+--- program using rew {start} . instead of rew start .
+crl [createSocketManager] :
+  { <> Config }
+=>
+  { < socketManager : SocketManager | 
+    nextNumber: 0, 
+    connections: mtCS,
+    localServers: mtLSS >
+    <> Config
+  }
+if
+  not socketManagerInConfig(Config)
+  .
+
+--- Socket creation rules
+
+crl [createClientTcpSocketMsgLocalClient] :
+  < SM : SocketManager | 
+    nextNumber: N, 
+    connections: CS, 
+    localServers: (localServer(SockNum, Port), LSS),
+    Att >
+  acceptClient(socket(SockNum), Me')
+  createClientTcpSocket(SM, Me, Address, Port)
+=>
+  < SM : SocketManager | 
+    nextNumber: s(s(N)),
+    connections: (CS, connectionFromTo(N, s(N), ""), connectionFromTo(s(N), N, "")),
+    localServers: (localServer(SockNum, Port), LSS),
+    Att >
+  createdSocket(Me, SM, socket(N))
+  acceptedClient(Me', socket(SockNum), "127.0.0.1", socket(s(N)))
+if
+  isLocal(Address)
+  .
+
+crl [createClientTcpSocketMsgExternalClient] :
+  < SM : SocketManager | 
+    nextNumber: N, 
+    connections: CS, 
+    Att >
+  createClientTcpSocket(SM, Me, Address, Port)
+=>
+  < SM : SocketManager | 
+    nextNumber: s(N),
+    connections: (CS, externalConnectionFromTo(N, Address, Port, "")),
+    Att >
+  createdSocket(Me, SM, socket(N))
+if
+  not isLocal(Address)
+  .
+
+rl [createServerTcpSocketMsg] :
+  < SM : SocketManager | 
+    nextNumber: N, 
+    localServers: LSS,
+    Att >
+  createServerTcpSocket(SM, Me, Port, Backlog)
+=>
+  < SM : SocketManager | 
+    nextNumber: s(N), 
+    localServers: (LSS, localServer(N, Port)),
+    Att >
+  createdSocket(Me, SM, socket(N))
+  .
+
+--- External client reply rules
+
+rl [sendExternalSocket] :
+  send(socket(N), Me, S)
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
+    Att >
+=>
+  --- Sent receipts DISABLED to lower state space (all code just drops the sent msg, so it is blowing up our state space because we will try dropping it everywhere)
+  ---sent(Me, socket(N))
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, Buffer + Address + ":" + string(Port, 10) + "#"), CS), 
+    Att >
+  .
+
+crl [receiveExternalSocket] :
+  receive(socket(N), Me)
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
+    Att >
+=>
+  received(Me, socket(N), Buffer)
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, ""), CS), 
+    Att >
+if
+  length(Buffer) > 0
+  .
+
+--- Local sockets send and receive
+rl [sendLocalSocket] :
+  send(socket(N), Me, S)
+  < SM : SocketManager |
+    connections: (connectionFromTo(N, N', Buffer), CS), 
+    Att >
+=>
+  --- Sent receipts DISABLED to lower state space (all code just drops the sent msg, so it is blowing up our state space because we will try dropping it everywhere)
+  ---sent(Me, socket(N))
+  < SM : SocketManager |
+    connections: (connectionFromTo(N, N', Buffer + S), CS), 
+    Att >
+  .
+
+crl [receiveLocalSocket] :
+  receive(socket(N'), Me)
+  < SM : SocketManager |
+    connections: (connectionFromTo(N, N', Buffer), CS), 
+    Att >
+=>
+  received(Me, socket(N'), Buffer)
+  < SM : SocketManager |
+    connections: (connectionFromTo(N, N', ""), CS), 
+    Att >
+if
+  length(Buffer) > 0
+  .
+
+--- Close socket
+rl [closeExternalSocket] : 
+  closeSocket(socket(N), Me)
+  < SM : SocketManager |
+    connections: (externalConnectionFromTo(N, Address, Port, Buffer), CS), 
+    Att >
+=>
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+  closedSocket(Me, socket(N), "")
+  .
+
+rl [closeLocalSocket] : 
+  closeSocket(socket(N), Me)
+  < SM : SocketManager |
+    connections: (connectionFromTo(N, N', Buffer), connectionFromTo(N', N, Buffer'), CS), 
+    Att >
+=>
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+  closedSocket(Me, socket(N), "")
+  .
+
+--- Reply with closedSocket if connections don't exist
+--- Only for local, since external socket cannot be closed by the website's end
+--- TODO: some of the behavior on socks.maude handles the website closing once reply is done, what do we want to do? Close immediately after sending a reply?
+--- (while local either party can close the socket)
+
+***(
+crl [sendLocalSocketNotExist] :
+  send(socket(N), Me, S)
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+=>
+  closedSocket(Me, socket(N), "")
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+if
+  not containsConnectionWith(N, CS)
+  .
+
+crl [receiveLocalSocketNotExist] :
+  receive(socket(N), Me)
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+=>
+  closedSocket(Me, socket(N), "")
+  < SM : SocketManager |
+    connections: CS, 
+    Att >
+if
+  not containsConnectionWith(N, CS)
+  .
+)
+
+endm
