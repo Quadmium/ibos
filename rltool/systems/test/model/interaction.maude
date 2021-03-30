@@ -33,10 +33,10 @@ rl [send] :
   .
 
 rl [read] :
-  < A : Client | cstate: waiting, read: S, Att >
+  < A : Client | cstate: waiting, target: B, read: S, Att >
   (msg S' from B to A)
 =>
-  < A : Client | cstate: waiting, read: (S + S'), Att >
+  < A : Client | cstate: waiting, target: B, read: (S + S'), Att >
   .
 endm
 
@@ -49,17 +49,18 @@ op Server : -> Cid [ctor] .
 sort ServerState .
 ops waiting : -> ServerState [ctor] .
 op sstate:_ : ServerState -> Attribute [ctor] .
+op reply:_ : String -> Attribute [ctor] .
 
 vars A B : Oid .
 vars Att : AttributeSet .
-vars S S' : String .
+vars S S' R : String .
 
 rl [read] :
-  < B : Server | sstate: waiting, read: S, Att >
+  < B : Server | sstate: waiting, reply: R, read: S, Att >
   (msg S' from A to B)
 =>
-  < B : Server | sstate: waiting, read: (S + S'), Att >
-  (msg "ServerReply" from B to A)
+  < B : Server | sstate: waiting, reply: R, read: (S + S'), Att >
+  (msg R from B to A)
   .
 endm
 
@@ -78,7 +79,7 @@ subsort String < Oid .
 op start : -> State [ctor] .
 eq start = {
     < "A" : Client | cstate: sending, target: "B", read: "" >
-    < "B" : Server | sstate: waiting, read: "" >
+    < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
   }
   .
 
@@ -90,7 +91,7 @@ eq start2 = {
     } >
     
     < blankWrapper("B") : BlankWrapper | world: {
-      < "B" : Server | sstate: waiting, read: "" >
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
     } >
   }
   .
@@ -107,7 +108,7 @@ eq start3 = {
     
     < blankWrapper(blankWrapper("B")) : BlankWrapper | world: {
       < blankWrapper("B") : BlankWrapper | world: {
-        < "B" : Server | sstate: waiting, read: "" >
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
       } >
     } >
     
@@ -122,7 +123,7 @@ eq start4 = {
     })
     
     createTLSWrapper("B", {
-      < "B" : Server | sstate: waiting, read: "" >
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
     })
   }
   .
@@ -139,7 +140,7 @@ eq start5 = {
     
     < blankWrapper(tlsWrapper("B")) : BlankWrapper | world: {
       createTLSWrapper("B", {
-        < "B" : Server | sstate: waiting, read: "" >
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
       })
     } >
     
@@ -157,9 +158,68 @@ eq start6 = {
 
     createTLSWrapper(tlsWrapper("B"), {
       createTLSWrapper("B", {
-        < "B" : Server | sstate: waiting, read: "" >
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
       })
     })
+  }
+  .
+
+--- TLS Wrapper with multiple outgoing connections
+op start7 : -> State [ctor] .
+eq start7 = {
+    createTLSWrapper("A", {
+      < "A" : Client | cstate: sending, target: "B", read: "" >
+      < "A" : Client | cstate: sending, target: "C", read: "" >
+    })
+    
+    createTLSWrapper("B", {
+      < "B" : Server | sstate: waiting, reply: "ServerReply B", read: "" >
+    })
+
+    createTLSWrapper("C", {
+      < "C" : Server | sstate: waiting, reply: "ServerReply C", read: "" >
+    })
+  }
+  .
+
+--- TLS Wrapper with multiple incoming connections
+op start8 : -> State [ctor] .
+eq start8 = {
+    createTLSWrapper("A", {
+      < "A" : Client | cstate: sending, target: "C", read: "" >
+    })
+
+    createTLSWrapper("B", {
+      < "B" : Client | cstate: sending, target: "C", read: "" >
+    })
+
+    createTLSWrapper("C", {
+      < "C" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+    })
+  }
+  .
+
+--- TLS Wrapper multiple outgoing plus blank wrappers around it
+op start9 : -> State [ctor] .
+eq start9 = {
+    < blankWrapper(tlsWrapper("A")) : BlankWrapper | world: {
+      createTLSWrapper("A", {
+        < "A" : Client | cstate: sending, target: "B", read: "" >
+        < "A" : Client | cstate: sending, target: "C", read: "" >
+      })
+    } >
+    
+    < blankWrapper(tlsWrapper("B")) : BlankWrapper | world: {
+      createTLSWrapper("B", {
+        < "B" : Server | sstate: waiting, reply: "ServerReply B", read: "" >
+      })
+    } >
+
+    < blankWrapper(tlsWrapper("C")) : BlankWrapper | world: {
+      createTLSWrapper("C", {
+        < "C" : Server | sstate: waiting, reply: "ServerReply C", read: "" >
+      })
+    } >
   }
   .
 endm
