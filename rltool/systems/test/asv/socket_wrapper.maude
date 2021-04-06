@@ -1,0 +1,281 @@
+load state.maude
+load network.maude
+---load socket_mock.maude
+load socket.maude
+load file.maude
+load time.maude
+
+mod SAMPLER is
+pr RANDOM .
+pr COUNTER .
+pr CONVERSION .
+op rand : -> [Float] .
+op sampleBernoulli : Float -> [Bool] .
+rl rand => float(random(counter) / 4294967295) .
+rl sampleBernoulli(P:Float) => rand < P:Float .
+endm
+
+mod SOCKET_WRAPPER_COMMON is
+pr NETWORK .
+pr STATE .
+pr SOCKET .
+pr SAMPLER .
+pr TIME .
+pr STD-STREAM .
+
+op serverC : String Nat -> Oid [ctor] .
+op serverS : Oid Nat -> Oid [ctor] .
+endm
+
+mod CLIENT_SOCKET_WRAPPER is
+pr SOCKET_WRAPPER_COMMON .
+
+--- We take the Oid of the client / server represented inside the wrapper as part of its identification
+--- This allows wrappers to find each other
+op clientSocketWrapper : Oid -> Oid [ctor] .
+op ClientSocketWrapper : -> Cid [ctor] .
+
+op targetServer:_ : Oid -> Attribute [ctor] .
+op currentMsg:_ : Msg -> Attribute [ctor] .
+
+sort CSWState .
+ops waiting connecting sent closing : -> CSWState [ctor] .
+op cswState:_ : CSWState -> Attribute [ctor] .
+
+op timer:_ : Oid -> Attribute [ctor] .
+
+op noMsg : -> Msg [ctor] .
+
+op repeat:_ : Nat -> Attribute [ctor] .
+
+vars CSWSTATE : CSWState .
+vars A B O Sock : Oid .
+vars S S' Address : String .
+vars N Port : Nat .
+vars M : String .
+vars C C' : Configuration .
+vars Att Att' Att'' : AttributeSet .
+
+rl [grabTimer] :
+  createdTimer(clientSocketWrapper(A), B, O)
+  < clientSocketWrapper(A) : ClientSocketWrapper | Att >
+=>
+  < clientSocketWrapper(A) : ClientSocketWrapper | timer: O, repeat: 0, Att >
+  .
+
+rl [connectToServer] :
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: waiting, targetServer: serverC(Address, Port), currentMsg: noMsg, world: {
+    (msg M from A to B)
+    C
+  }, Att >
+=>
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: waiting, targetServer: serverC(Address, Port), currentMsg: (msg M from A to B), world: {
+    C
+  }, Att >
+  write(stdout, A, "Grab message\n")
+  .
+
+rl [connect] :
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: waiting, targetServer: serverC(Address, Port), currentMsg: (msg M from A to B), world: {
+    C
+  }, Att >
+=>
+  createClientTcpSocket(socketManager, clientSocketWrapper(A), Address, Port)
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connecting, targetServer: serverC(Address, Port), currentMsg: (msg M from A to B), world: {
+    C
+  }, Att >
+  write(stdout, A, "Connecting\n")
+  .
+
+rl [connected] :
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connecting, currentMsg: (msg M from A to B), Att >
+  createdSocket(clientSocketWrapper(A), socketManager, Sock)
+=>
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: sent, currentMsg: (msg M from A to B), Att >
+  send(Sock, clientSocketWrapper(A), M)
+  receive(Sock, clientSocketWrapper(A))
+  write(stdout, A, "Connected\n")
+  .
+
+rl [incomingMsg] :
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: sent, currentMsg: (msg M from A to B), repeat: N, world: {
+    C
+  }, Att >
+  received(clientSocketWrapper(A), Sock, S)
+=>
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: closing, currentMsg: noMsg, repeat: 0, world: {
+    (msg S from B to A)
+    C
+  }, Att >
+  closeSocket(Sock, clientSocketWrapper(A))
+  write(stdout, A, "Success\n")
+  .
+
+rl [closedNoMsg] :
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: CSWSTATE, currentMsg: noMsg, Att >
+  closedSocket(clientSocketWrapper(A), Sock, S)
+=>
+  write(stdout, A, "Closed no timer\n")
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: waiting, currentMsg: noMsg, Att >
+  .
+
+rl [closed] :
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: CSWSTATE, currentMsg: (msg M from A to B), timer: O, repeat: N, Att >
+  closedSocket(clientSocketWrapper(A), Sock, S)
+=>
+  write(stdout, A, "Closed started timer\n")
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: CSWSTATE, currentMsg: (msg M from A to B), timer: O, repeat: s(N), Att >
+  startTimer(O, clientSocketWrapper(A), oneShot, 1000 ms / (2 ^ (N quo 4)))
+  .
+  
+rl [error] :
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: CSWSTATE, currentMsg: (msg M from A to B), timer: O, repeat: N, Att >
+  socketError(clientSocketWrapper(A), Sock, S)
+=>
+  write(stdout, A, "Error started timer\n")
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: CSWSTATE, currentMsg: (msg M from A to B), timer: O, repeat: s(N), Att >
+  startTimer(O, clientSocketWrapper(A), oneShot, 1000 ms / (2 ^ (N quo 4)))
+  .
+
+rl [timerTrigger] :
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: CSWSTATE, currentMsg: (msg M from A to B), Att >
+  timeOut(clientSocketWrapper(A), O)
+=>
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: waiting, currentMsg: (msg M from A to B), Att >
+  .
+
+endm
+
+mod SERVER_SOCKET_WRAPPER is
+pr SOCKET_WRAPPER_COMMON .
+
+--- We take the Oid of the client / server represented inside the wrapper as part of its identification
+--- This allows wrappers to find each other
+op serverSocketWrapper : Oid -> Oid [ctor] .
+op ServerSocketWrapper : -> Cid [ctor] .
+
+sort SSWState .
+ops init waitingSockCreate waitingForClient accepted : -> SSWState [ctor] .
+op sswState:_ : SSWState -> Attribute [ctor] .
+
+op serverSock:_ : Oid -> Attribute [ctor] .
+
+sort Buffer .
+subsort Msg < Buffer .
+op mtB : -> Buffer [ctor] .
+op _,_ : Buffer Buffer -> Buffer [ctor assoc id: mtB] .
+
+op msgBuffer:_ : Buffer -> Attribute [ctor] .
+op bufferLen:_ : Nat -> Attribute [ctor] .
+op maxBufferLen:_ : Nat -> Attribute [ctor] .
+
+***(
+sort Buffer .
+subsort Msg < Buffer .
+op mtB : -> Buffer [ctor] .
+op _,_ : Buffer Buffer -> Buffer [ctor] .
+
+vars B B' : Buffer .
+
+op insertAt : Buffer Msg Nat -> Buffer .
+ceq insertAt((B , B'), MSG, N) = B , insertAt(B', MSG, N - 1) if N =/= 0 .
+eq insertAt(B, MSG, 0) = MSG , B .
+eq insertAt(mtB, MSG, N) = MSG , mtB .
+)
+
+vars BOOL : Bool .
+vars B B' : Buffer .
+vars A O Sock CSock : Oid .
+vars S S' Address : String .
+vars N N' Port : Nat .
+vars M : String .
+vars MSG : Msg .
+vars C C' : Configuration .
+vars Att Att' Att'' : AttributeSet .
+
+op receiveOrDrop : Oid Oid Bool -> Configuration [ctor] .
+
+rl [createServer] :
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | world: { C } >
+=>
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | maxBufferLen: 20, msgBuffer: mtB, bufferLen: 0, world: { C } >
+  createServerTcpSocket(socketManager, serverSocketWrapper(serverS(A, Port)), Port, 1000)
+  .
+
+rl [createdServer] :
+  < serverSocketWrapper(A) : ServerSocketWrapper | Att >
+  createdSocket(serverSocketWrapper(A), socketManager, Sock)
+=>
+  < serverSocketWrapper(A) : ServerSocketWrapper | serverSock: Sock, Att >
+  acceptClient(Sock, serverSocketWrapper(A))
+  .
+
+rl [acceptedClientBufferFull] :
+  < serverSocketWrapper(A) : ServerSocketWrapper | bufferLen: N, maxBufferLen: N', Att >
+  acceptedClient(serverSocketWrapper(A), Sock, Address, CSock)
+=>
+  < serverSocketWrapper(A) : ServerSocketWrapper | bufferLen: N, maxBufferLen: N', Att >
+  receiveOrDrop(CSock, serverSocketWrapper(A), sampleBernoulli(float(N) / float(N')))
+  write(stdout, A, "\nP=\n" + string(float(N) / float(N')))
+  acceptClient(Sock, serverSocketWrapper(A))
+  .
+
+crl [receiveOrDropAccept] :
+  receiveOrDrop(CSock, serverSocketWrapper(A), BOOL)
+=>
+  receive(CSock, serverSocketWrapper(A))
+if
+  not BOOL
+  .
+  
+crl [receiveOrDropAccept] :
+  receiveOrDrop(CSock, serverSocketWrapper(A), BOOL)
+=>
+  closeSocket(CSock, serverSocketWrapper(A))
+if
+  BOOL
+  .
+
+rl [incomingMsg] :
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | msgBuffer: B, bufferLen: N, Att >
+  received(serverSocketWrapper(serverS(A, Port)), CSock, S)
+=>
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | msgBuffer: (B, msg S from CSock to A), bufferLen: s(N), Att >
+  .
+
+rl [processMsg] :
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | msgBuffer: ((msg S from CSock to A), B), bufferLen: N, world: {
+    C
+  }, Att >
+=>
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | msgBuffer: B, bufferLen: (N), world: {
+    (msg S from CSock to A)
+    C
+  }, Att >
+  .
+
+rl [outgoingMsg] :
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | world: {
+    (msg M from A to CSock)
+    C
+  }, Att >
+=>
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | world: {
+    C
+  }, Att >
+  send(CSock, serverSocketWrapper(serverS(A, Port)), M)
+  .
+
+rl [sent] :
+  sent(serverSocketWrapper(A), CSock)
+=>
+  closeSocket(CSock, serverSocketWrapper(A))
+  .
+
+rl [closed] :
+  closedSocket(serverSocketWrapper(A), CSock, S)
+=>
+  none
+  .
+
+endm

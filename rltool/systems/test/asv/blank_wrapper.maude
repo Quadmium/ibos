@@ -1,0 +1,47 @@
+load state.maude
+load network.maude
+
+--- A wrapper that does nothing, used as a template for other wrappers
+mod BLANK_WRAPPER is
+pr NETWORK .
+pr STATE .
+
+--- We take the Oid of the client / server represented inside the wrapper as part of its identification
+--- This allows wrappers to find each other
+op blankWrapper : Oid -> Oid .
+op BlankWrapper : -> Cid .
+
+vars A B O : Oid .
+vars M : MessageContent .
+vars C C' : Configuration .
+vars Att Att' Att'' : AttributeSet .
+
+--- If we see a message in A's world, pass it as a message to wrap(B)
+--- This also applies for B sending a message out to A
+rl [outgoingMsg] :
+  < blankWrapper(A) : BlankWrapper | world: {
+    (msg M from A to B)
+    C
+  }, Att >
+=>
+  < blankWrapper(A) : BlankWrapper | world: {
+    C
+  }, Att >
+  (msg M from blankWrapper(A) to blankWrapper(B))
+  .
+
+--- If we are wrap(B) and receive a message, pass it to the inner world
+--- This also applies for A receiving a message from B
+rl [incomingMsg] :
+  < blankWrapper(B) : BlankWrapper | world: {
+    C
+  }, Att >
+  (msg M from blankWrapper(A) to blankWrapper(B))
+=>
+  < blankWrapper(B) : BlankWrapper | world: {
+    (msg M from A to B)
+    C
+  }, Att >
+.
+
+endm

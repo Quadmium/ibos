@@ -1,0 +1,303 @@
+load state.maude
+load network.maude
+load blank_wrapper.maude
+load tls_wrapper.maude
+load socket_wrapper.maude
+
+mod CLIENT_SERVER_SHARED is
+pr NETWORK .
+
+op read:_ : String -> Attribute [ctor] .
+endm
+
+--- A client that sends one message and reads the response
+mod CLIENT is
+pr CLIENT_SERVER_SHARED .
+
+op Client : -> Cid [ctor] .
+
+op target:_ : Oid -> Attribute [ctor] .
+
+sort ClientState .
+ops sending waiting : -> ClientState [ctor] .
+op cstate:_ : ClientState -> Attribute [ctor] .
+
+op spam:_ : Bool -> Attribute [ctor] .
+
+vars A B : Oid .
+vars Att : AttributeSet .
+vars S S' : String .
+
+rl [send] :
+  < A : Client | cstate: sending, target: B, Att >
+=>
+  < A : Client | cstate: waiting, target: B, Att >
+  (msg "ClientMsg" from A to B)
+  .
+
+rl [read] :
+  < A : Client | cstate: waiting, target: B, read: S, Att >
+  (msg S' from B to A)
+=>
+  < A : Client | cstate: waiting, target: B, read: (S + S'), Att >
+  .
+
+rl [spam] :
+  < A : Client | cstate: waiting, spam: true, Att >
+=>
+  < A : Client | cstate: sending, spam: true, Att >
+  .
+
+endm
+
+--- A server that responds to a message
+mod SERVER is
+pr CLIENT_SERVER_SHARED .
+
+op Server : -> Cid [ctor] .
+
+sort ServerState .
+ops waiting : -> ServerState [ctor] .
+op sstate:_ : ServerState -> Attribute [ctor] .
+op reply:_ : String -> Attribute [ctor] .
+
+vars A B : Oid .
+vars Att : AttributeSet .
+vars S S' R : String .
+
+rl [read] :
+  < B : Server | sstate: waiting, reply: R, read: S, Att >
+  (msg S' from A to B)
+=>
+  < B : Server | sstate: waiting, reply: R, read: (S + S'), Att >
+  (msg R from B to A)
+  .
+endm
+
+--- The overall interaction between client / server in several different scenarios
+--- Use "rew start ." or start2 ...
+mod INTERACTION is
+pr STATE .
+pr CLIENT .
+pr SERVER .
+pr BLANK_WRAPPER .
+pr TLS_WRAPPER .
+pr CLIENT_SOCKET_WRAPPER .
+pr SERVER_SOCKET_WRAPPER .
+
+subsort String < Oid .
+
+--- No wrappers, just A to B
+op start1 : -> State [ctor] .
+eq start1 = {
+    < "A" : Client | cstate: sending, target: "B", read: "" >
+    < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+  }
+  .
+
+--- The blank wrapper
+op start2 : -> State [ctor] .
+eq start2 = {
+    < blankWrapper("A") : BlankWrapper | world: {
+      < "A" : Client | cstate: sending, target: "B", read: "" >
+    } >
+    
+    < blankWrapper("B") : BlankWrapper | world: {
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+    } >
+  }
+  .
+  
+--- Nested blank wrappers
+op start3 : -> State [ctor] .
+eq start3 = {
+    < blankWrapper(blankWrapper("A")) : BlankWrapper | world: {
+      < blankWrapper("A") : BlankWrapper | world: {
+        < "A" : Client | cstate: sending, target: "B", read: "" >
+      } >
+    } >
+    
+    
+    < blankWrapper(blankWrapper("B")) : BlankWrapper | world: {
+      < blankWrapper("B") : BlankWrapper | world: {
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+      } >
+    } >
+    
+  }
+  .
+
+--- The TLS wrapper
+op start4 : -> State [ctor] .
+eq start4 = {
+    createTLSWrapper("A", {
+      < "A" : Client | cstate: sending, target: "B", read: "" >
+    })
+    
+    createTLSWrapper("B", {
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+    })
+  }
+  .
+
+--- Nested blank / TLS wrappers
+op start5 : -> State [ctor] .
+eq start5 = {
+    < blankWrapper(tlsWrapper("A")) : BlankWrapper | world: {
+      createTLSWrapper("A", {
+        < "A" : Client | cstate: sending, target: "B", read: "" >
+      })
+    } >
+    
+    
+    < blankWrapper(tlsWrapper("B")) : BlankWrapper | world: {
+      createTLSWrapper("B", {
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+      })
+    } >
+    
+  }
+  .
+
+--- Nested TLS wrappers
+op start6 : -> State [ctor] .
+eq start6 = {
+    createTLSWrapper(tlsWrapper("A"), {
+      createTLSWrapper("A", {
+        < "A" : Client | cstate: sending, target: "B", read: "" >
+      })
+    })
+
+    createTLSWrapper(tlsWrapper("B"), {
+      createTLSWrapper("B", {
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+      })
+    })
+  }
+  .
+
+--- Double Nested TLS wrappers
+op start6double : -> State [ctor] .
+eq start6double = {
+    createTLSWrapper(tlsWrapper(tlsWrapper("A")), {
+      createTLSWrapper(tlsWrapper("A"), {
+        createTLSWrapper("A", {
+          < "A" : Client | cstate: sending, target: "B", read: "" >
+        })
+      })
+    })
+
+    createTLSWrapper(tlsWrapper(tlsWrapper("B")), {
+      createTLSWrapper(tlsWrapper("B"), {
+        createTLSWrapper("B", {
+          < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+        })
+      })
+    })
+  }
+  .
+
+--- TLS Wrapper with multiple outgoing connections
+op start7 : -> State [ctor] .
+eq start7 = {
+    createTLSWrapper("A", {
+      < "A" : Client | cstate: sending, target: "B", read: "" >
+      < "A" : Client | cstate: sending, target: "C", read: "" >
+    })
+    
+    createTLSWrapper("B", {
+      < "B" : Server | sstate: waiting, reply: "ServerReply B", read: "" >
+    })
+
+    createTLSWrapper("C", {
+      < "C" : Server | sstate: waiting, reply: "ServerReply C", read: "" >
+    })
+  }
+  .
+
+--- TLS Wrapper with multiple incoming connections
+op start8 : -> State [ctor] .
+eq start8 = {
+    createTLSWrapper("A", {
+      < "A" : Client | cstate: sending, target: "C", read: "" >
+    })
+
+    createTLSWrapper("B", {
+      < "B" : Client | cstate: sending, target: "C", read: "" >
+    })
+
+    createTLSWrapper("C", {
+      < "C" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+    })
+  }
+  .
+
+--- TLS Wrapper multiple outgoing plus blank wrappers around it
+op start9 : -> State [ctor] .
+eq start9 = {
+    < blankWrapper(tlsWrapper("A")) : BlankWrapper | world: {
+      createTLSWrapper("A", {
+        < "A" : Client | cstate: sending, target: "B", read: "" >
+        < "A" : Client | cstate: sending, target: "C", read: "" >
+      })
+    } >
+    
+    < blankWrapper(tlsWrapper("B")) : BlankWrapper | world: {
+      createTLSWrapper("B", {
+        < "B" : Server | sstate: waiting, reply: "ServerReply B", read: "" >
+      })
+    } >
+
+    < blankWrapper(tlsWrapper("C")) : BlankWrapper | world: {
+      createTLSWrapper("C", {
+        < "C" : Server | sstate: waiting, reply: "ServerReply C", read: "" >
+      })
+    } >
+  }
+  .
+
+op start10 : -> State [ctor] .
+eq start10 = {
+    <>
+    ---< clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+    ---  < "A" : Client | cstate: sending, target: "B", read: "" >
+    ---} >
+
+    < serverSocketWrapper(serverS("B", 1234)) : ServerSocketWrapper | world: {
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+    } >
+  }
+  .
+
+op start11 : -> State [ctor] .
+eq start11 = {
+    <>
+    < clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), currentMsg: noMsg, world: {
+      < "A" : Client | cstate: sending, target: "B", read: "", spam: true >
+    } >
+    createTimer(timeManager, clientSocketWrapper("A"))  
+
+    ---< serverSocketWrapper(serverS("B", 1234)) : ServerSocketWrapper | world: {
+    ---  < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+    ---} >
+  }
+  .
+
+op start12 : -> State [ctor] .
+eq start12 = {
+    <>
+    < clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), currentMsg: noMsg, world: {
+      < "A" : Client | cstate: sending, target: "B", read: "", spam: true >
+    } >
+    createTimer(timeManager, clientSocketWrapper("A"))
+    ---< clientSocketWrapper("C") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), currentMsg: noMsg, world: {
+    ---  < "C" : Client | cstate: sending, target: "B", read: "" >
+    ---} >
+    ---createTimer(timeManager, clientSocketWrapper("C"))
+
+    < serverSocketWrapper(serverS("B", 1234)) : ServerSocketWrapper | world: {
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+    } >
+  }
+  .
+endm

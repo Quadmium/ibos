@@ -1,0 +1,85 @@
+load state.maude
+load network.maude
+load tls_data.maude
+
+--- Implements TLS wrapper using the TLS module
+--- See blank_wrapper.maude for more detailed comments
+mod TLS_WRAPPER is
+pr NETWORK .
+pr STATE .
+pr TLS .
+
+op tlsWrapper : Oid -> Oid .
+
+vars A B O : Oid .
+vars M : MessageContent .
+vars C C' : Configuration .
+vars Att Att' Att'' Att''' : AttributeSet .
+
+vars IS : InitSessions .
+vars RS : RespSessions .
+
+vars K K' : Payload .
+vars T : Payload .
+vars Nonce : Nonce .
+
+--- Has a connection been established with given Oid?
+op isTrusted : Oid InitSessions -> Bool .
+eq isTrusted(A, ((trusted: A k1: K k2: K' nonce: Nonce) IS)) = true .
+eq isTrusted(A, IS) = false [owise] .
+
+op isTrusted : Oid RespSessions -> Bool .
+eq isTrusted(A, ((trusted: A k1: K k2: K' nonce: Nonce) RS)) = true .
+eq isTrusted(A, RS) = false [owise] .
+
+vars ST : State .
+
+--- Used to simplify creation of tls wrappers, just need Oid and world
+op createTLSWrapper : Oid State -> Configuration .
+eq createTLSWrapper(A, ST) = < tlsWrapper(A) : TLSAgent | world: ST, nextNonce: 0, initSessions: emptySession, respSessions: emptySession > .
+
+--- An outgoing message is converted into TLSsend if there is a connection
+crl [outgoingMsg] :
+  < tlsWrapper(A) : TLSAgent | respSessions: RS, initSessions: IS, world: {
+    (msg M from A to B)
+    C
+  }, Att >
+=>
+  < tlsWrapper(A) : TLSAgent | respSessions: RS, initSessions: IS, world: {
+    C
+  }, Att >
+  (TLSsend M from tlsWrapper(A) to tlsWrapper(B))
+if
+  isTrusted(tlsWrapper(B), IS) or isTrusted(tlsWrapper(B), RS)
+  .
+
+--- An outgoing message adds notInititated if there is no connection, and does so only once
+crl [outgoingMsgNotInit] :
+  < tlsWrapper(A) : TLSAgent | respSessions: RS, initSessions: IS, world: {
+    (msg M from A to B)
+    C
+  }, Att >
+=>
+  < tlsWrapper(A) : TLSAgent | respSessions: RS, initSessions: (notInitiated(tlsWrapper(B)) IS), world: {
+    (msg M from A to B)
+    C
+  }, Att >
+if
+  not tlsWrapper(B) inSession RS and not tlsWrapper(B) inSession IS
+  .
+
+--- A TLSrecv is converted to incoming message, if trusted
+crl [incomingMsg] :
+  < tlsWrapper(B) : TLSAgent | respSessions: RS, initSessions: IS, world: {
+    C
+  }, Att >
+  (TLSrecv M from tlsWrapper(A) to tlsWrapper(B))
+=>
+  < tlsWrapper(B) : TLSAgent | respSessions: RS, initSessions: IS, world: {
+    (msg M from A to B)
+    C
+  }, Att >
+if
+  isTrusted(tlsWrapper(A), IS) or isTrusted(tlsWrapper(A), RS)
+  .
+endm

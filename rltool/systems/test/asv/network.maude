@@ -1,0 +1,13 @@
+--- Simplified network model, to be used by wrappers
+mod NETWORK is
+pr CONFIGURATION .
+pr STRING .
+
+--- Can subsort MessageContent to pass custom messages on the network
+sort MessageContent .
+subsort String < MessageContent .
+
+--- Send message on a connection from object A to object B
+op msg_from_to_ : MessageContent Oid Oid -> Msg [ctor msg] .
+
+endm
