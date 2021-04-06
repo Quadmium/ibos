@@ -248,7 +248,7 @@ rl [processMsg] :
     C
   }, Att >
 =>
-  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | msgBuffer: B, bufferLen: (N), world: {
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | msgBuffer: B, bufferLen: (N - 1), world: {
     (msg S from CSock to A)
     C
   }, Att >
