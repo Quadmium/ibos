@@ -14,6 +14,7 @@ endm
 --- A client that sends one message and reads the response
 mod CLIENT is
 pr CLIENT_SERVER_SHARED .
+pr CONVERSION .
 
 op target:_ : Oid -> Attribute [ctor] .
 
@@ -32,7 +33,7 @@ crl [send] :
   < A : Client | cstate: sending, target: B, spam: N, Att >
 =>
   < A : Client | cstate: sending, target: B, spam: (N - 1), Att >
-  (msg "ClientMsg" from A to B)
+  (msg ("ClientMsg" + string(100 - N, 10)) from A to B)
 if
   N > 0
   .
@@ -264,7 +265,7 @@ op start10 : -> State [ctor] .
 eq start10 = {
     <>
     < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
-      < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, world: {
+      < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
         < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
       } >
     } >
@@ -282,17 +283,19 @@ eq start11 = {
   }
   .
 
-eq unwrap(serverASVWrapper(A)) = A .
-eq unwrap(clientASVWrapper(A)) = A .
+vars N : Nat .
+rl unwrap(serverASVWrapper(A)) => unwrap(A) .
+rl unwrap(clientASVWrapper(A)) => unwrap(A) .
+rl unwrap(socket(N)) => socket(N) .
 
 op start12 : -> State [ctor] .
 eq start12 = {
     < clientASVWrapper("A") : ClientASVWrapper | world: {
-      < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
+      < "A" : Client | cstate: sending, target: "B", read: "", spam: 100 >
     } >
 
-    < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, world: {
-      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
+    < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 1 >
     } >
   }
   .
@@ -302,7 +305,7 @@ op start13 : -> State [ctor] .
 eq start13 = {
     <>
     < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
-      < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, world: {
+      < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
         < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
       } >
     } >

@@ -3,24 +3,11 @@ load network.maude
 ---load socket_mock.maude
 load socket.maude
 load file.maude
-load time.maude
-
-mod SAMPLER is
-pr RANDOM .
-pr COUNTER .
-pr CONVERSION .
-op rand : -> [Float] .
-op sampleBernoulli : Float -> [Bool] .
-rl rand => float(random(counter) / 4294967295) .
-rl sampleBernoulli(P:Float) => rand < P:Float .
-endm
 
 mod SOCKET_WRAPPER_COMMON is
 pr NETWORK .
 pr STATE .
 pr SOCKET .
-pr SAMPLER .
-pr TIME .
 pr STD-STREAM .
 
 op serverC : String Nat -> Oid [ctor] .

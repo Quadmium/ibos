@@ -1,9 +1,28 @@
 load state.maude
 load network.maude
+load time.maude
+load file.maude
+
+mod SAMPLER is
+pr RANDOM .
+pr COUNTER .
+pr CONVERSION .
+op rand : -> [Float] .
+op sampleBernoulli : Float -> [Bool] .
+rl rand => float(random(counter) / 4294967295) .
+rl sampleBernoulli(P:Float) => rand < P:Float .
+
+op sampleUniform : Int Int -> [Int] .
+vars MAX MIN : Int .
+rl sampleUniform(MIN, MAX) => rat(floor(rand * float((MAX - MIN) + 1))) + MIN .
+endm
 
 mod ASV_WRAPPER_COMMON is 
 pr NETWORK .
 pr STATE .
+pr SAMPLER .
+pr TIME .
+pr STD-STREAM .
 
 op clientASVWrapper : Oid -> Oid .
 op ClientASVWrapper : -> Cid .
@@ -54,22 +73,44 @@ vars M : MessageContent .
 vars C C' : Configuration .
 vars Att Att' Att'' : AttributeSet .
 vars Buff : Buffer .
-vars N : Nat .
+vars N N' : Nat .
+vars CT : Nat .
 
-rl [incomingMsg] :
-  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, Att >
+op ctr:_ : Nat -> Attribute .
+
+op log : Universal -> Configuration [ctor poly(1)] .
+
+crl [incomingMsgNotFull] :
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, maxBufferLen: N', Att >
   (msg M from clientASVWrapper(A) to serverASVWrapper(B))
 =>
-  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: (Buff, (msg M from A to B)), bufferLen: s(N), Att >
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: (Buff, (msg M from A to B)), bufferLen: s(N), maxBufferLen: N', Att >
+if
+  N < N'
+  .
+
+crl [incomingMsgFull] :
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, maxBufferLen: N', ctr: CT, Att >
+  (msg M from clientASVWrapper(A) to serverASVWrapper(B))
+=>
+  ---write(stdout, A, "Full\n")
+  ---log((msg string(CT, 10) from A to B), Buff)
+  if sampleBernoulli(float(N') / (float(CT) + 1.0))
+  then < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: replace(Buff, (msg M from A to B), sampleUniform(0, N' - 1)), 
+         bufferLen: N, maxBufferLen: N', ctr: (CT + 1), Att >
+  else < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, maxBufferLen: N', ctr: (CT + 1), Att >
+  fi
+if 
+  N == N'
   .
 
 crl [passBuffer] :
-  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, world: { 
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, ctr: CT, world: { 
     < B : Server | msgBuffer: mtB, bufferLen: 0, Att' >
     C 
   }, Att >
 =>
-  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, world: { 
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, world: { 
     < B : Server | msgBuffer: Buff, bufferLen: N, Att' >
     C 
   }, Att >
@@ -89,7 +130,6 @@ rl [outgoingMsg] :
   (msg M from serverASVWrapper(A) to clientASVWrapper(B))
   .
 
-
 op isWrapped : Oid -> Bool .
 eq isWrapped(clientASVWrapper(A)) = true .
 eq isWrapped(A) = false [owise] .
@@ -97,10 +137,8 @@ eq isWrapped(A) = false [owise] .
 --- When using sockets, incoming messages don't know the wrapper structure (since we don't encode message contents yet)
 --- This allows a msg without the clientASVWrapper(...) oid to be accepted
 crl [rewriteUnwrapped] :
-  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, Att >
   (msg M from A to serverASVWrapper(B))
 =>
-  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, Att >
   (msg M from clientASVWrapper(A) to serverASVWrapper(B))
 if
   not isWrapped(A)

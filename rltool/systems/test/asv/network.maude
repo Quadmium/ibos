@@ -20,6 +20,15 @@ op msgBuffer:_ : Buffer -> Attribute [ctor] .
 op bufferLen:_ : Int -> Attribute [ctor] .
 op maxBufferLen:_ : Int -> Attribute [ctor] .
 
+vars Buff : Buffer .
+vars M M' : Msg .
+vars N : Nat .
+--- Replace at index
+op replace : Buffer Msg Nat -> Buffer .
+ceq replace((M', Buff), M, N) = (M', replace(Buff, M, (N - 1))) if N >= 1 .
+ceq replace((M', Buff), M, N) = (M, Buff) if N == 0 .
+ceq replace(Buff, M, N) = mtB if Buff == mtB .
+
 op Client : -> Cid [ctor] .
 op Server : -> Cid [ctor] .
 
