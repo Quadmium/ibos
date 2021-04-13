@@ -95,7 +95,6 @@ rl [incomingMsg] :
 =>
   < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connected(Sock), serverOidInWorld: B, world: {
     (msg S from B to A)
-  write(stdout, A, "X\n")
     C
   }, Att >
   write(stdout, A, "Incoming socket msg\n")

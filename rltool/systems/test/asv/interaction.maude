@@ -295,20 +295,19 @@ eq start12 = {
   }
   .
 
+--- To be used with socket_mock
 op start13 : -> State [ctor] .
 eq start13 = {
     <>
-    < clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
-      < "A" : Client | cstate: sending, target: "B", read: "", spam: false >
+    < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
+      < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, world: {
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
+      } >
     } >
-    createTimer(timeManager, clientSocketWrapper("A"))
-    ---< clientSocketWrapper("C") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), currentMsg: noMsg, world: {
-    ---  < "C" : Client | cstate: sending, target: "B", read: "" >
-    ---} >
-    ---createTimer(timeManager, clientSocketWrapper("C"))
-
-    < serverSocketWrapper(serverS("B", 1234)) : ServerSocketWrapper | world: {
-      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
+    < clientSocketWrapper(clientASVWrapper("A")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+      < clientASVWrapper("A") : ClientASVWrapper | world: {
+        < "A" : Client | cstate: sending, target: "B", read: "", spam: false >
+      } >
     } >
   }
   .
