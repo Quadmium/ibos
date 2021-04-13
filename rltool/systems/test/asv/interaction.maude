@@ -87,6 +87,7 @@ pr CLIENT_SOCKET_WRAPPER .
 pr SERVER_SOCKET_WRAPPER .
 pr CLIENT_ASV_WRAPPER .
 pr SERVER_ASV_WRAPPER .
+pr PROVISION .
 
 subsort String < Oid .
 
@@ -272,6 +273,19 @@ eq start10 = {
   }
   .
 
+op start10P : -> State [ctor] .
+eq start10P = {
+    <>
+    < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
+      createProvision(serverASVWrapper("B"), 2, 4, {
+        < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
+          < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
+        } >
+      })
+    } >
+  }
+  .
+
 op start11 : -> State [ctor] .
 eq start11 = {
     <>
@@ -314,6 +328,20 @@ eq start13 = {
         < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
       })
     } >
+  }
+  .
+
+op start14 : -> State [ctor] .
+eq start14 = {
+    createClientASVWrapper("A", {
+      < "A" : Client | cstate: sending, target: "B", read: "", spam: 1 >
+    })
+
+    createProvision(serverASVWrapper("B"), 2, 4, {
+      < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
+      } >
+    })
   }
   .
 endm

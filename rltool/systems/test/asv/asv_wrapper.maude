@@ -219,3 +219,74 @@ if
   .
 
 endm
+
+mod PROVISION is
+pr ASV_WRAPPER_COMMON .
+
+op provision : Oid -> Oid [ctor] .
+op Provision : -> Cid [ctor] .
+
+op world : Nat State -> Attribute [ctor] .
+
+vars A B O : Oid .
+vars M : MessageContent .
+vars C C' : Configuration .
+vars Att Att' Att'' : AttributeSet .
+vars Buff : Buffer .
+vars N N' TargetServers K L : Nat .
+vars CT : Nat .
+vars ST : State .
+
+op serverInitState:_ : State -> Attribute [ctor] .
+op worldCtr:_ : Nat -> Attribute [ctor] .
+op requestCtr:_ : Nat -> Attribute [ctor] .
+op k:_ : Nat -> Attribute [ctor] .
+op expectedLoadPerSec:_ : Nat -> Attribute [ctor] .
+
+op createProvision : Oid Nat Nat State -> Configuration .
+eq createProvision(A, K, L, ST) = 
+  < provision(A) : Provision | serverInitState: ST, world(0, ST), worldCtr: 1, requestCtr: 0, k: K, expectedLoadPerSec: L > 
+  createTimer(timeManager, provision(A))
+  .
+
+rl [createdTimer] :
+  createdTimer(provision(A), B, O)
+=>
+  startTimer(O, provision(A), periodic, 5 seconds)
+  .
+
+crl [timeoutNothing] :
+  timeOut(provision(A), O)
+  < provision(A) : Provision | worldCtr: N, requestCtr: N', k: K, expectedLoadPerSec: L, Att >
+=>
+  < provision(A) : Provision | worldCtr: N, requestCtr: 0, k: K, expectedLoadPerSec: L, Att >
+  write(stdout, A, "Provision timeout - no changes\n")
+if
+  N' <= (L * N) * K
+  .
+
+crl [timeoutAdd] :
+  timeOut(provision(A), O)
+  < provision(A) : Provision | serverInitState: ST, worldCtr: N, requestCtr: N', k: K, expectedLoadPerSec: L, Att >
+=>
+  < provision(A) : Provision | serverInitState: ST, world(N, ST), worldCtr: s(N), requestCtr: 0, k: K, expectedLoadPerSec: L, Att >
+  write(stdout, A, "Provision timeout - added server\n")
+if
+  N' > (L * N) * K
+  .
+
+rl [incomingMsg] :
+  (msg M from A to B)
+  < provision(B) : Provision | world(0, { C }), requestCtr: N, Att >
+=>
+  < provision(B) : Provision | world(0, { (msg M from A to B) C }), requestCtr: s(N), Att >
+  .
+
+rl [outgoingMsg] :
+  < provision(B) : Provision | world(N, { (msg M from B to A ) C }), Att >
+=>
+  < provision(B) : Provision | world(N, { C }), Att >
+  (msg M from B to A )
+  .
+
+endm
