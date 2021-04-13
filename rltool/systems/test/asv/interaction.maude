@@ -276,9 +276,9 @@ op start11 : -> State [ctor] .
 eq start11 = {
     <>
     < clientSocketWrapper(clientASVWrapper("A")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
-      < clientASVWrapper("A") : ClientASVWrapper | world: {
+      createClientASVWrapper("A", {
         < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
-      } >
+      })
     } >
   }
   .
@@ -290,12 +290,12 @@ rl unwrap(socket(N)) => socket(N) .
 
 op start12 : -> State [ctor] .
 eq start12 = {
-    < clientASVWrapper("A") : ClientASVWrapper | world: {
-      < "A" : Client | cstate: sending, target: "B", read: "", spam: 100 >
-    } >
+    createClientASVWrapper("A", {
+      < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
+    })
 
     < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
-      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 1 >
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
     } >
   }
   .
@@ -310,9 +310,9 @@ eq start13 = {
       } >
     } >
     < clientSocketWrapper(clientASVWrapper("A")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
-      < clientASVWrapper("A") : ClientASVWrapper | world: {
+      createClientASVWrapper("A", {
         < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
-      } >
+      })
     } >
   }
   .

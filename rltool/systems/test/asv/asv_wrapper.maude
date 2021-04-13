@@ -34,34 +34,107 @@ endm
 mod CLIENT_ASV_WRAPPER is
 pr ASV_WRAPPER_COMMON .
 
-vars A B O : Oid .
+vars A B O D : Oid .
 vars M : MessageContent .
 vars C C' : Configuration .
+vars N : Nat .
 vars Att Att' Att'' : AttributeSet .
+vars ST : State .
+
+vars MSG : Msg .
+
+sort CAWState .
+ops waiting startSend sending sendingWaitTimer sent : -> CAWState [ctor] .
+
+op cawState:_ : CAWState -> Attribute [ctor] .
+op currentMsg:_ : Msg -> Attribute [ctor] .
+op numToSend:_ : Nat -> Attribute [ctor] .
+op timer:_ : Oid -> Attribute [ctor] .
+
+op noTimer : -> Oid [ctor] .
+op noMsg : -> Msg [ctor] .
+
+op repeat : Msg Nat -> Configuration .
+crl repeat(MSG, N) => MSG repeat(MSG, N - 1) if N =/= 0 .
+crl repeat(MSG, N) => none if N == 0 .
+
+op createClientASVWrapper : Oid State -> Configuration [ctor] .
+eq createClientASVWrapper(A, ST) = 
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: waiting, currentMsg: noMsg, world: ST, numToSend: 1, timer: noTimer >
+  .
 
 rl [outgoingMsg] :
-  < clientASVWrapper(A) : ClientASVWrapper | world: {
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: waiting, currentMsg: noMsg, world: {
     (msg M from A to B)
     C
   }, Att >
 =>
-  < clientASVWrapper(A) : ClientASVWrapper | world: {
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: startSend, currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), world: {
     C
   }, Att >
-  (msg M from clientASVWrapper(A) to serverASVWrapper(B))
+  .
+
+rl [startSend] :
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: startSend, Att >
+=>
+  createTimer(timeManager, clientASVWrapper(A))
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: sendingWaitTimer, Att >
+  .
+
+rl [createdTimer] :
+  createdTimer(clientASVWrapper(A), B, O)
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: sendingWaitTimer, timer: D, Att >
+=>
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: sending, timer: O, Att >
+  .
+
+rl [sending] :
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: sending, currentMsg: MSG, numToSend: N, timer: O, Att >
+=>
+  repeat(MSG, N)
+  startTimer(O, clientASVWrapper(A), oneShot, 1 seconds)
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: sent, currentMsg: MSG, numToSend: N, timer: O, Att >
   .
 
 rl [incomingMsg] :
-  < clientASVWrapper(B) : ClientASVWrapper | world: {
+  < clientASVWrapper(B) : ClientASVWrapper | cawState: sent, currentMsg: MSG, numToSend: N, timer: O, world: {
     C
   }, Att >
   (msg M from serverASVWrapper(A) to clientASVWrapper(B))
 =>
-  < clientASVWrapper(B) : ClientASVWrapper | world: {
+  stopTimer(O, clientASVWrapper(A))
+  < clientASVWrapper(B) : ClientASVWrapper | cawState: waiting, currentMsg: noMsg, numToSend: 1, timer: noTimer, world: {
     (msg M from A to B)
     C
   }, Att >
-.
+  .
+
+rl [timeoutTimer] :
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: sent, timer: O, numToSend: N, Att >
+  timeOut(clientASVWrapper(A), O)
+=>
+  deleteTimer(O, clientASVWrapper(A))
+  < clientASVWrapper(A) : ClientASVWrapper | cawState: startSend, timer: noTimer, numToSend: (N * 2), Att >
+  .
+
+
+rl [startedTimer] :
+  startedTimer(clientASVWrapper(A), O)
+=>
+  none
+  .
+
+rl [stoppedTimer] :
+  stoppedTimer(O, clientASVWrapper(A))
+=>
+  deleteTimer(O, clientASVWrapper(A))
+  .
+
+rl [deletedTimer] :
+  deletedTimer(clientASVWrapper(A), O)
+=>
+  none
+  .
 
 endm
 
@@ -110,6 +183,7 @@ crl [passBuffer] :
     C 
   }, Att >
 =>
+  write(stdout, B, "Passed buffer down\n")
   < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, world: { 
     < B : Server | msgBuffer: Buff, bufferLen: N, Att' >
     C 
