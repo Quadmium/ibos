@@ -21,17 +21,26 @@ sort ClientState .
 ops sending waiting : -> ClientState [ctor] .
 op cstate:_ : ClientState -> Attribute [ctor] .
 
-op spam:_ : Bool -> Attribute [ctor] .
+op spam:_ : Nat -> Attribute [ctor] .
 
 vars A B : Oid .
 vars Att : AttributeSet .
 vars S S' : String .
+vars N : Nat .
 
-rl [send] :
-  < A : Client | cstate: sending, target: B, Att >
+crl [send] :
+  < A : Client | cstate: sending, target: B, spam: N, Att >
 =>
-  < A : Client | cstate: waiting, target: B, Att >
+  < A : Client | cstate: sending, target: B, spam: (N - 1), Att >
   (msg "ClientMsg" from A to B)
+if
+  N > 0
+  .
+
+rl [sendDone] : 
+  < A : Client | cstate: sending, target: B, spam: 0, Att >
+=>
+  < A : Client | cstate: waiting, target: B, spam: 0, Att >
   .
 
 rl [read] :
@@ -40,13 +49,6 @@ rl [read] :
 =>
   < A : Client | cstate: waiting, target: B, read: (S + S'), Att >
   .
-
-rl [spam] :
-  < A : Client | cstate: waiting, spam: true, Att >
-=>
-  < A : Client | cstate: sending, spam: true, Att >
-  .
-
 endm
 
 --- A server that responds to a message
@@ -274,7 +276,7 @@ eq start11 = {
     <>
     < clientSocketWrapper(clientASVWrapper("A")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
       < clientASVWrapper("A") : ClientASVWrapper | world: {
-        < "A" : Client | cstate: sending, target: "B", read: "", spam: false >
+        < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
       } >
     } >
   }
@@ -286,7 +288,7 @@ eq unwrap(clientASVWrapper(A)) = A .
 op start12 : -> State [ctor] .
 eq start12 = {
     < clientASVWrapper("A") : ClientASVWrapper | world: {
-      < "A" : Client | cstate: sending, target: "B", read: "", spam: false >
+      < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
     } >
 
     < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, world: {
@@ -306,7 +308,7 @@ eq start13 = {
     } >
     < clientSocketWrapper(clientASVWrapper("A")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
       < clientASVWrapper("A") : ClientASVWrapper | world: {
-        < "A" : Client | cstate: sending, target: "B", read: "", spam: false >
+        < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
       } >
     } >
   }

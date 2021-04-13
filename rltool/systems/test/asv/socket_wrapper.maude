@@ -25,6 +25,20 @@ pr STD-STREAM .
 
 op serverC : String Nat -> Oid [ctor] .
 op serverS : Oid Nat -> Oid [ctor] .
+
+op untilDelim : String String -> String .
+op afterDelim : String String -> String .
+
+vars S Delim Data Rest : String .
+vars N : Nat .
+
+ceq untilDelim(S, Delim) = Data if 
+  N    := find(S, Delim, 0) /\
+  Data := substr(S, 0, N) .
+
+ceq afterDelim(S, Delim) = Data if 
+  N    := find(S, Delim, 0) /\
+  Data := substr(S, N + 1, length(S)) .
 endm
 
 mod CLIENT_SOCKET_WRAPPER is
@@ -43,6 +57,8 @@ ops waiting connecting closed : -> CSWState [ctor] .
 op connected : Oid -> CSWState [ctor] .
 op cswState:_ : CSWState -> Attribute [ctor] .
 
+op read:_ : String -> Attribute [ctor] .
+
 vars CSWSTATE : CSWState .
 vars A B O Sock : Oid .
 vars S S' Address : String .
@@ -50,6 +66,7 @@ vars N Port : Nat .
 vars M : String .
 vars C C' : Configuration .
 vars Att Att' Att'' : AttributeSet .
+vars Data Rest : String .
 
 rl [connectToServer] :
   < clientSocketWrapper(A) : ClientSocketWrapper | cswState: waiting, targetServer: serverC(Address, Port), world: {
@@ -59,7 +76,7 @@ rl [connectToServer] :
 =>
   createClientTcpSocket(socketManager, clientSocketWrapper(A), Address, Port)
   write(stdout, A, "Connecting\n")
-  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connecting, targetServer: serverC(Address, Port), serverOidInWorld: B, world: {
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connecting, targetServer: serverC(Address, Port), serverOidInWorld: B, read: "", world: {
     (msg M from A to B)
     C
   }, Att >
@@ -81,23 +98,34 @@ rl [outgoingMsg] :
   }, Att >
 =>
   write(stdout, A, "Outgoing socket msg\n")
-  send(Sock, clientSocketWrapper(A), M)
+  send(Sock, clientSocketWrapper(A), M + ";")
   < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connected(Sock), world: {
     C
   }, Att >
   .
 
-rl [incomingMsg] :
-  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connected(Sock), serverOidInWorld: B, world: {
+rl [received] :
+  < clientSocketWrapper(A) : ClientSocketWrapper | read: S, Att >
+  received(clientSocketWrapper(A), Sock, S')
+=>
+  < clientSocketWrapper(A) : ClientSocketWrapper | read: (S + S'), Att >
+  receive(Sock, clientSocketWrapper(A))
+  .
+
+crl [incomingMsg] :
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connected(Sock), serverOidInWorld: B, read: S, world: {
     C
   }, Att >
-  received(clientSocketWrapper(A), Sock, S)
 =>
-  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connected(Sock), serverOidInWorld: B, world: {
-    (msg S from B to A)
+  < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connected(Sock), serverOidInWorld: B, read: Rest, world: {
+    (msg Data from B to A)
     C
   }, Att >
   write(stdout, A, "Incoming socket msg\n")
+if
+  length(S) =/= 0 /\
+  Data := untilDelim(S, ";") /\
+  Rest := afterDelim(S, ";")
   .
 
 rl [sent] :
@@ -135,6 +163,10 @@ op ServerSocketWrapper : -> Cid [ctor] .
 op serverSock:_ : Oid -> Attribute [ctor] .
 op unwrap : Oid -> Oid [ctor] .
 
+op read : Oid String -> Attribute [ctor] .
+
+op initialized : -> Attribute [ctor] .
+
 vars BOOL : Bool .
 vars B B' : Buffer .
 vars A O Sock CSock : Oid .
@@ -144,13 +176,15 @@ vars M : String .
 vars MSG : Msg .
 vars C C' : Configuration .
 vars Att Att' Att'' : AttributeSet .
+vars Data Rest : String .
 
 op receiveOrDrop : Oid Oid Bool -> Configuration [ctor] .
 
 rl [createServer] :
   < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | world: { C } >
 =>
-  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | world: { C } >
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | world: { C }, initialized >
+  write(stdout, A, "Creating server\n")
   createServerTcpSocket(socketManager, serverSocketWrapper(serverS(A, Port)), Port, 1000)
   .
 
@@ -166,22 +200,33 @@ rl [acceptedClient] :
   < serverSocketWrapper(A) : ServerSocketWrapper | Att >
   acceptedClient(serverSocketWrapper(A), Sock, Address, CSock)
 =>
-  < serverSocketWrapper(A) : ServerSocketWrapper | Att >
+  < serverSocketWrapper(A) : ServerSocketWrapper | read(CSock, ""), Att >
   receive(CSock, serverSocketWrapper(A))
   acceptClient(Sock, serverSocketWrapper(A))
   .
 
-rl [incomingMsg] :
-  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | world: {
+rl [received] :
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | read(CSock, S), Att >
+  received(serverSocketWrapper(serverS(A, Port)), CSock, S')
+=>
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | read(CSock, S + S'), Att >
+  receive(CSock, serverSocketWrapper(serverS(A, Port)))
+  .
+
+crl [incomingMsg] :
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | read(CSock, S), world: {
     C
   }, Att >
-  received(serverSocketWrapper(serverS(A, Port)), CSock, S)
 =>
-  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | world: {
-    (msg S from CSock to A)
+  < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | read(CSock, Rest), world: {
+    (msg Data from CSock to A)
     C
   }, Att >
   write(stdout, A, "Server received\n")
+if
+  length(S) =/= 0 /\
+  Data := untilDelim(S, ";") /\
+  Rest := afterDelim(S, ";")
   .
 
 rl [outgoingMsg] :
@@ -193,7 +238,7 @@ rl [outgoingMsg] :
   < serverSocketWrapper(serverS(A, Port)) : ServerSocketWrapper | world: {
     C
   }, Att >
-  send(unwrap(CSock), serverSocketWrapper(serverS(A, Port)), M)
+  send(unwrap(CSock), serverSocketWrapper(serverS(A, Port)), M + ";")
   write(stdout, A, "Server outgoing\n")
   .
 
@@ -205,6 +250,12 @@ rl [sent] :
 
 rl [closed] :
   closedSocket(serverSocketWrapper(A), CSock, S)
+=>
+  none
+  .
+
+rl [wrote] :
+  wrote(A, stdout)
 =>
   none
   .

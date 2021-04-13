@@ -192,10 +192,6 @@ if
   Nonce ; PL' := dec(PL, K')
   .
 
---- Drop duplicates
-var MSG : Msg .
-eq MSG MSG = MSG .
-
 endm
 
 mod TLSDEMO is 
