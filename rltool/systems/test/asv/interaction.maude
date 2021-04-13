@@ -3,6 +3,7 @@ load network.maude
 load blank_wrapper.maude
 load tls_wrapper.maude
 load socket_wrapper.maude
+load asv_wrapper.maude
 
 mod CLIENT_SERVER_SHARED is
 pr NETWORK .
@@ -13,8 +14,6 @@ endm
 --- A client that sends one message and reads the response
 mod CLIENT is
 pr CLIENT_SERVER_SHARED .
-
-op Client : -> Cid [ctor] .
 
 op target:_ : Oid -> Attribute [ctor] .
 
@@ -54,22 +53,21 @@ endm
 mod SERVER is
 pr CLIENT_SERVER_SHARED .
 
-op Server : -> Cid [ctor] .
-
 sort ServerState .
 ops waiting : -> ServerState [ctor] .
 op sstate:_ : ServerState -> Attribute [ctor] .
 op reply:_ : String -> Attribute [ctor] .
 
-vars A B : Oid .
+vars A B B' : Oid .
 vars Att : AttributeSet .
 vars S S' R : String .
+vars Buff : Buffer .
+vars N : Nat .
 
-rl [read] :
-  < B : Server | sstate: waiting, reply: R, read: S, Att >
-  (msg S' from A to B)
+rl [process] :
+  < B : Server | sstate: waiting, reply: R, read: S, msgBuffer: ((msg S' from A to B'), Buff), bufferLen: N, Att >
 =>
-  < B : Server | sstate: waiting, reply: R, read: (S + S'), Att >
+  < B : Server | sstate: waiting, reply: R, read: (S + S'), msgBuffer: (Buff), bufferLen: (N - 1), Att >
   (msg R from B to A)
   .
 endm
@@ -84,8 +82,12 @@ pr BLANK_WRAPPER .
 pr TLS_WRAPPER .
 pr CLIENT_SOCKET_WRAPPER .
 pr SERVER_SOCKET_WRAPPER .
+pr CLIENT_ASV_WRAPPER .
+pr SERVER_ASV_WRAPPER .
 
 subsort String < Oid .
+
+vars A : Oid .
 
 --- No wrappers, just A to B
 op start1 : -> State [ctor] .
@@ -259,12 +261,10 @@ eq start9 = {
 op start10 : -> State [ctor] .
 eq start10 = {
     <>
-    ---< clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
-    ---  < "A" : Client | cstate: sending, target: "B", read: "" >
-    ---} >
-
-    < serverSocketWrapper(serverS("B", 1234)) : ServerSocketWrapper | world: {
-      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+    < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
+      < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, world: {
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
+      } >
     } >
   }
   .
@@ -272,22 +272,34 @@ eq start10 = {
 op start11 : -> State [ctor] .
 eq start11 = {
     <>
-    < clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), currentMsg: noMsg, world: {
-      < "A" : Client | cstate: sending, target: "B", read: "", spam: true >
+    < clientSocketWrapper(clientASVWrapper("A")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+      < clientASVWrapper("A") : ClientASVWrapper | world: {
+        < "A" : Client | cstate: sending, target: "B", read: "", spam: false >
+      } >
     } >
-    createTimer(timeManager, clientSocketWrapper("A"))  
-
-    ---< serverSocketWrapper(serverS("B", 1234)) : ServerSocketWrapper | world: {
-    ---  < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
-    ---} >
   }
   .
 
+eq unwrap(serverASVWrapper(A)) = A .
+eq unwrap(clientASVWrapper(A)) = A .
+
 op start12 : -> State [ctor] .
 eq start12 = {
+    < clientASVWrapper("A") : ClientASVWrapper | world: {
+      < "A" : Client | cstate: sending, target: "B", read: "", spam: false >
+    } >
+
+    < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, world: {
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
+    } >
+  }
+  .
+
+op start13 : -> State [ctor] .
+eq start13 = {
     <>
-    < clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), currentMsg: noMsg, world: {
-      < "A" : Client | cstate: sending, target: "B", read: "", spam: true >
+    < clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+      < "A" : Client | cstate: sending, target: "B", read: "", spam: false >
     } >
     createTimer(timeManager, clientSocketWrapper("A"))
     ---< clientSocketWrapper("C") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), currentMsg: noMsg, world: {
@@ -296,7 +308,7 @@ eq start12 = {
     ---createTimer(timeManager, clientSocketWrapper("C"))
 
     < serverSocketWrapper(serverS("B", 1234)) : ServerSocketWrapper | world: {
-      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
     } >
   }
   .

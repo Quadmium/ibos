@@ -1,0 +1,109 @@
+load state.maude
+load network.maude
+
+mod ASV_WRAPPER_COMMON is 
+pr NETWORK .
+pr STATE .
+
+op clientASVWrapper : Oid -> Oid .
+op ClientASVWrapper : -> Cid .
+
+op serverASVWrapper : Oid -> Oid .
+op ServerASVWrapper : -> Cid .
+endm
+
+mod CLIENT_ASV_WRAPPER is
+pr ASV_WRAPPER_COMMON .
+
+vars A B O : Oid .
+vars M : MessageContent .
+vars C C' : Configuration .
+vars Att Att' Att'' : AttributeSet .
+
+rl [outgoingMsg] :
+  < clientASVWrapper(A) : ClientASVWrapper | world: {
+    (msg M from A to B)
+    C
+  }, Att >
+=>
+  < clientASVWrapper(A) : ClientASVWrapper | world: {
+    C
+  }, Att >
+  (msg M from clientASVWrapper(A) to serverASVWrapper(B))
+  .
+
+rl [incomingMsg] :
+  < clientASVWrapper(B) : ClientASVWrapper | world: {
+    C
+  }, Att >
+  (msg M from serverASVWrapper(A) to clientASVWrapper(B))
+=>
+  < clientASVWrapper(B) : ClientASVWrapper | world: {
+    (msg M from A to B)
+    C
+  }, Att >
+.
+
+endm
+
+mod SERVER_ASV_WRAPPER is
+pr ASV_WRAPPER_COMMON .
+
+vars A B O : Oid .
+vars M : MessageContent .
+vars C C' : Configuration .
+vars Att Att' Att'' : AttributeSet .
+vars Buff : Buffer .
+vars N : Nat .
+
+rl [incomingMsg] :
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, Att >
+  (msg M from clientASVWrapper(A) to serverASVWrapper(B))
+=>
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: (Buff, (msg M from A to B)), bufferLen: s(N), Att >
+  .
+
+crl [passBuffer] :
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, world: { 
+    < B : Server | msgBuffer: mtB, bufferLen: 0, Att' >
+    C 
+  }, Att >
+=>
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, world: { 
+    < B : Server | msgBuffer: Buff, bufferLen: N, Att' >
+    C 
+  }, Att >
+if
+  N =/= 0
+  .
+
+rl [outgoingMsg] :
+  < serverASVWrapper(A) : ServerASVWrapper | world: {
+    (msg M from A to B)
+    C
+  }, Att >
+=>
+  < serverASVWrapper(A) : ServerASVWrapper | world: {
+    C
+  }, Att >
+  (msg M from serverASVWrapper(A) to clientASVWrapper(B))
+  .
+
+
+op isWrapped : Oid -> Bool .
+eq isWrapped(clientASVWrapper(A)) = true .
+eq isWrapped(A) = false [owise] .
+
+--- When using sockets, incoming messages don't know the wrapper structure (since we don't encode message contents yet)
+--- This allows a msg without the clientASVWrapper(...) oid to be accepted
+crl [rewriteUnwrapped] :
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, Att >
+  (msg M from A to serverASVWrapper(B))
+=>
+  < serverASVWrapper(B) : ServerASVWrapper | msgBuffer: Buff, bufferLen: N, Att >
+  (msg M from clientASVWrapper(A) to serverASVWrapper(B))
+if
+  not isWrapped(A)
+  .
+
+endm

@@ -2,6 +2,7 @@
 mod NETWORK is
 pr CONFIGURATION .
 pr STRING .
+pr INT .
 
 --- Can subsort MessageContent to pass custom messages on the network
 sort MessageContent .
@@ -9,5 +10,17 @@ subsort String < MessageContent .
 
 --- Send message on a connection from object A to object B
 op msg_from_to_ : MessageContent Oid Oid -> Msg [ctor msg] .
+
+sort Buffer .
+subsort Msg < Buffer .
+op mtB : -> Buffer [ctor] .
+op _,_ : Buffer Buffer -> Buffer [ctor assoc id: mtB] .
+
+op msgBuffer:_ : Buffer -> Attribute [ctor] .
+op bufferLen:_ : Int -> Attribute [ctor] .
+op maxBufferLen:_ : Int -> Attribute [ctor] .
+
+op Client : -> Cid [ctor] .
+op Server : -> Cid [ctor] .
 
 endm
