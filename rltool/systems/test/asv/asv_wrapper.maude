@@ -179,7 +179,7 @@ crl [incomingMsgFirstTime] :
   (msg M from clientASVWrapper(A) to serverASVWrapper(B))
 =>
   write(stdout, B, "ASV read " + M + " - " + string(getMsgID(M), 10) + "-" + "-1" + "\n")
-  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), clientMsgID(clientASVWrapper(A), -1), Att >
+  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), clientMsgID(clientASVWrapper(A), (getMsgID(M) - 1)), Att >
 if
   not hasClientID(clientASVWrapper(A), Att)
   .
@@ -195,22 +195,22 @@ if
   .
 
 crl [incomingMsgNotFull] :
-  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), msgBuffer: Buff, bufferLen: N, maxBufferLen: N', clientMsgID(clientASVWrapper(A), I), Att >
+  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), msgBuffer: Buff, bufferLen: N, maxBufferLen: N', Att >
 =>
-  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, msgBuffer: (Buff, (msg M from A to B)), bufferLen: s(N), maxBufferLen: N', clientMsgID(clientASVWrapper(A), getMsgID(M)), Att >
+  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, msgBuffer: (Buff, (msg M from A to B)), bufferLen: s(N), maxBufferLen: N', Att >
 if
   N < N'
   .
 
 crl [incomingMsgFull] :
-  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), msgBuffer: Buff, bufferLen: N, maxBufferLen: N', ctr: CT, clientMsgID(clientASVWrapper(A), I), Att >
+  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), msgBuffer: Buff, bufferLen: N, maxBufferLen: N', ctr: CT, Att >
 =>
   write(stdout, A, "ASV full\n")
   ---log((msg string(CT, 10) from A to B), Buff)
   if sampleBernoulli(float(N') / (float(CT) + 1.0))
   then < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, msgBuffer: replace(Buff, (msg M from A to B), sampleUniform(0, N' - 1)), 
-         bufferLen: N, maxBufferLen: N', ctr: (CT + 1), clientMsgID(clientASVWrapper(A), getMsgID(M)), Att >
-  else < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, msgBuffer: Buff, bufferLen: N, maxBufferLen: N', ctr: (CT + 1), clientMsgID(clientASVWrapper(A), I), Att >
+         bufferLen: N, maxBufferLen: N', ctr: (CT + 1), Att >
+  else < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, msgBuffer: Buff, bufferLen: N, maxBufferLen: N', ctr: (CT + 1), Att >
   fi
 if 
   N == N'
@@ -240,12 +240,13 @@ if
   .
 
 rl [outgoingMsg] :
-  < serverASVWrapper(A) : ServerASVWrapper | world: {
+  < serverASVWrapper(A) : ServerASVWrapper | clientMsgID(clientASVWrapper(B), I), world: {
     (msg M from A to B)
     C
   }, Att >
 =>
-  < serverASVWrapper(A) : ServerASVWrapper | world: {
+  --- TODO: this should be a real id from M
+  < serverASVWrapper(A) : ServerASVWrapper | clientMsgID(clientASVWrapper(B), (I + 1)), world: {
     C
   }, Att >
   (msg M from serverASVWrapper(A) to clientASVWrapper(B))

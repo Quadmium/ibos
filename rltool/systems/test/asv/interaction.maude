@@ -11,10 +11,12 @@ pr NETWORK .
 op read:_ : String -> Attribute [ctor] .
 endm
 
---- A client that sends one message and reads the response
+--- A client that sends a message and reads the response
 mod CLIENT is
 pr CLIENT_SERVER_SHARED .
 pr CONVERSION .
+pr STD-STREAM .
+pr TIME_WRAPPER .
 
 op target:_ : Oid -> Attribute [ctor] .
 
@@ -28,6 +30,12 @@ vars A B : Oid .
 vars Att : AttributeSet .
 vars S S' : String .
 vars N : Nat .
+
+op createClient : Oid Oid Nat -> Configuration [ctor] .
+eq createClient(A, B, N) = 
+  < A : Client | cstate: sending, target: B, spam: N, read: "" >
+  WinitRoute(A)
+  .
 
 crl [send] :
   < A : Client | cstate: sending, target: B, spam: N, Att >
@@ -48,7 +56,17 @@ rl [read] :
   < A : Client | cstate: waiting, target: B, read: S, Att >
   (msg S' from B to A)
 =>
+  WgetTimeSinceEpoch(timeManager, A)
+  write(stdout, A, "Read success\n")
   < A : Client | cstate: waiting, target: B, read: (S + S'), Att >
+  .
+
+rl [time] :
+  < A : Client | Att >
+  WgotTimeSinceEpoch(A, timeManager, N)
+=>
+  < A : Client | Att >
+  write(stdout, A, string(N, 10) + "\n")
   .
 endm
 
@@ -85,6 +103,7 @@ ops waiting ready : -> SlowServerState [ctor] .
 op ssstate:_ : SlowServerState -> Attribute [ctor] .
 op reply:_ : String -> Attribute [ctor] .
 op timer:_ : Oid -> Attribute [ctor] .
+op interval:_ : Nat -> Attribute [ctor] .
 
 vars A B O : Oid .
 vars Att : AttributeSet .
@@ -94,7 +113,7 @@ vars C : Configuration .
 
 op createSlowServer : Oid Nat String -> Configuration .
 eq createSlowServer(B, N, R) =
-  < B : SlowServer | ssstate: waiting, reply: R >
+  < B : SlowServer | ssstate: waiting, reply: R, interval: N >
   WinitRoute(B)
   WcreateTimer(timeManager, B)
   .
@@ -104,11 +123,11 @@ eq incomingMsgInConfig(B, C (msg S from A to B)) = true .
 eq incomingMsgInConfig(B, C) = false [owise] .
 
 rl [createdTimer] :
-  < B : SlowServer | ssstate: waiting, Att >
+  < B : SlowServer | ssstate: waiting, interval: N, Att >
   WcreatedTimer(B, A, O)
 =>
-  < B : SlowServer | ssstate: ready, timer: O, Att >
-  WstartTimer(O, B, periodic, 1 seconds)
+  < B : SlowServer | ssstate: ready, timer: O, interval: N, Att >
+  WstartTimer(O, B, periodic, N)
   .
 
 rl [read] :
@@ -134,6 +153,51 @@ if
   .
 endm
 
+mod ATTACKER is
+pr CLIENT_SERVER_SHARED .
+pr TIME_WRAPPER .
+pr CONVERSION .
+
+op Attacker : -> Cid [ctor] .
+
+sort AttackerState .
+ops waiting ready : -> AttackerState [ctor] .
+op astate:_ : AttackerState -> Attribute [ctor] .
+op timer:_ : Oid -> Attribute [ctor] .
+op target:_ : Oid -> Attribute [ctor] .
+op ctr:_ : Nat -> Attribute [ctor] .
+
+vars A B O : Oid .
+vars Att : AttributeSet .
+vars S S' R : String .
+vars N : Nat .
+vars C : Configuration .
+
+op createAttacker : Oid Oid -> Configuration .
+eq createAttacker(A, B) =
+  < A : Attacker | astate: waiting, target: B, ctr: 0 >
+  WinitRoute(A)
+  WcreateTimer(timeManager, A)
+  .
+
+rl [createdTimer] :
+< A : Attacker | astate: waiting, Att >
+  WcreatedTimer(A, B, O)
+=>
+  < A : Attacker | astate: ready, timer: O, Att >
+  WstartTimer(O, A, periodic, (1 seconds) quo 4)
+  .
+
+rl [read] :
+  < A : Attacker | astate: ready, target: B, ctr: N, Att >
+  WtimeOut(A, O)
+=>
+  (msg string(N, 10) + ",M" from A to B)
+  < A : Attacker | astate: ready, target: B, ctr: s(N), Att >
+  write(stdout, A, "Attacker timeout\n")
+  .
+endm
+
 --- The overall interaction between client / server in several different scenarios
 --- Use "rew start ." or start2 ...
 mod INTERACTION is
@@ -147,6 +211,7 @@ pr CLIENT_SOCKET_WRAPPER .
 pr SERVER_SOCKET_WRAPPER .
 pr CLIENT_ASV_WRAPPER .
 pr SERVER_ASV_WRAPPER .
+pr ATTACKER .
 pr PROVISION .
 
 subsort String < Oid .
@@ -438,6 +503,36 @@ eq start14 = {
         < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
       })
     })
+  }
+  .
+
+op startA : -> State [ctor] .
+eq startA = {
+    <>
+    < clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+      createAttacker("A", "B")
+    } >
+  }
+  .
+
+op startAM : -> State [ctor] .
+eq startAM = {
+    <>
+    < clientSocketWrapper(clientASVWrapper("A")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+      createClientASVWrapper("A", {
+        createClient("A", "B", 100) ---< "A" : Client | cstate: sending, target: "B", read: "", spam: 100 >
+      })
+    } >
+    < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
+      createProvision(serverASVWrapper("B"), 1, 1, {
+        createServerASVWrapper("B", {
+          createSlowServer("B", 1 seconds, "ServerReply")
+        })
+      })
+    } >
+    ---< clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+    ---  createAttacker("A", "B")
+    ---} >
   }
   .
 endm

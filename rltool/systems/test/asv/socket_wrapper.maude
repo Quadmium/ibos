@@ -1,7 +1,7 @@
 load state.maude
 load network.maude
----load socket_mock.maude
-load socket.maude
+load socket_mock.maude
+---load socket.maude
 load file.maude
 
 mod SOCKET_WRAPPER_COMMON is

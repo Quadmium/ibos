@@ -30,6 +30,9 @@ op WstoppedTimer : Oid Oid -> Msg [ctor msg format (m o)] .
 op WdeleteTimer : Oid Oid -> Msg [ctor msg format (b o)] .
 op WdeletedTimer : Oid Oid -> Msg [ctor msg format (m o)] .
 
+op WgetTimeSinceEpoch : Oid Oid -> Msg [ctor msg format (b o)] .
+op WgotTimeSinceEpoch : Oid Oid Nat -> Msg [ctor msg format (m o)] .
+
 op route : Oid Oid -> Oid [ctor] .
 op route : Oid Nat Oid -> Oid [ctor] .
 
@@ -158,6 +161,32 @@ rl [deletedTimerRoute] :
   write(stdout, O1, "WdeletedTimer\n")
   < OID : CID | world: {
     WdeletedTimer(O1, O2)
+    C 
+  }, Att >
+  .
+
+rl [getTimeSinceEpochRoute] :
+  < OID : CID | world: {
+    WgetTimeSinceEpoch(timeManager, O1)
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WgetTimeSinceEpoch\n")
+  WgetTimeSinceEpoch(timeManager, route(OID, O1))
+  < OID : CID | world: {
+    C 
+  }, Att >
+  .
+
+rl [gotTimeSinceEpochRoute] :
+  WgotTimeSinceEpoch(route(OID, O1), O2, N)
+  < OID : CID | world: {
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WgotTimeSinceEpoch\n")
+  < OID : CID | world: {
+    WgotTimeSinceEpoch(O1, O2, N)
     C 
   }, Att >
   .
@@ -380,6 +409,22 @@ rl [deletedTimerImpl] :
 =>
   <>
   WdeletedTimer(O1, O2)
+  .
+
+rl [getTimeSinceEpochImpl] :
+  <>
+  WgetTimeSinceEpoch(timeManager, O1)
+=>
+  <>
+  getTimeSinceEpoch(timeManager, O1)
+  .
+
+rl [gotTimeSinceEpochImpl] :
+  <>
+  gotTimeSinceEpoch(O1, O2, N)
+=>
+  <>
+  WgotTimeSinceEpoch(O1, O2, N)
   .
 
 endm
