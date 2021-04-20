@@ -12,20 +12,6 @@ pr STD-STREAM .
 
 op serverC : String Nat -> Oid [ctor] .
 op serverS : Oid Nat -> Oid [ctor] .
-
-op untilDelim : String String -> String .
-op afterDelim : String String -> String .
-
-vars S Delim Data Rest : String .
-vars N : Nat .
-
-ceq untilDelim(S, Delim) = Data if 
-  N    := find(S, Delim, 0) /\
-  Data := substr(S, 0, N) .
-
-ceq afterDelim(S, Delim) = Data if 
-  N    := find(S, Delim, 0) /\
-  Data := substr(S, N + 1, length(S)) .
 endm
 
 mod CLIENT_SOCKET_WRAPPER is

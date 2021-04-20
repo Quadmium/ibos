@@ -61,17 +61,76 @@ ops waiting : -> ServerState [ctor] .
 op sstate:_ : ServerState -> Attribute [ctor] .
 op reply:_ : String -> Attribute [ctor] .
 
-vars A B B' : Oid .
+vars A B : Oid .
 vars Att : AttributeSet .
 vars S S' R : String .
-vars Buff : Buffer .
-vars N : Nat .
 
-rl [process] :
-  < B : Server | sstate: waiting, reply: R, read: S, msgBuffer: ((msg S' from A to B'), Buff), bufferLen: N, Att >
+rl [read] :
+  < B : Server | sstate: waiting, reply: R, Att >
+  (msg S' from A to B)
 =>
-  < B : Server | sstate: waiting, reply: R, read: (S + S'), msgBuffer: (Buff), bufferLen: (N - 1), Att >
+  < B : Server | sstate: waiting, reply: R, Att >
   (msg R from B to A)
+  .
+endm
+
+mod SLOWSERVER is
+pr CLIENT_SERVER_SHARED .
+pr TIME_WRAPPER .
+
+op SlowServer : -> Cid [ctor] .
+
+sort SlowServerState .
+ops waiting ready : -> SlowServerState [ctor] .
+op ssstate:_ : SlowServerState -> Attribute [ctor] .
+op reply:_ : String -> Attribute [ctor] .
+op timer:_ : Oid -> Attribute [ctor] .
+
+vars A B O : Oid .
+vars Att : AttributeSet .
+vars S S' R : String .
+vars N : Nat .
+vars C : Configuration .
+
+op createSlowServer : Oid Nat String -> Configuration .
+eq createSlowServer(B, N, R) =
+  < B : SlowServer | ssstate: waiting, reply: R >
+  WinitRoute(B)
+  WcreateTimer(timeManager, B)
+  .
+
+op incomingMsgInConfig : Oid Configuration -> Bool .
+eq incomingMsgInConfig(B, C (msg S from A to B)) = true .
+eq incomingMsgInConfig(B, C) = false [owise] .
+
+rl [createdTimer] :
+  < B : SlowServer | ssstate: waiting, Att >
+  WcreatedTimer(B, A, O)
+=>
+  < B : SlowServer | ssstate: ready, timer: O, Att >
+  WstartTimer(O, B, periodic, 1 seconds)
+  .
+
+rl [read] :
+  < B : SlowServer | ssstate: ready, reply: R, timer: O, Att >
+  (msg S' from A to B)
+  WtimeOut(B, O)
+=>
+  write(stdout, B, "Replied timeout\n")
+  < B : SlowServer | ssstate: ready, reply: R, timer: O, Att >
+  (msg R from B to A)
+  .
+
+crl [ignoreTimeout] :
+  < B : SlowServer | ssstate: ready, reply: R, timer: O, Att >
+  WtimeOut(B, O)
+  C
+=>
+  write(stdout, B, "Ignored timeout\n")
+  < B : SlowServer | ssstate: ready, reply: R, timer: O, Att >
+  C
+if
+  not incomingMsgInConfig(B, C)
   .
 endm
 
@@ -81,6 +140,7 @@ mod INTERACTION is
 pr STATE .
 pr CLIENT .
 pr SERVER .
+pr SLOWSERVER .
 pr BLANK_WRAPPER .
 pr TLS_WRAPPER .
 pr CLIENT_SOCKET_WRAPPER .
@@ -266,9 +326,20 @@ op start10 : -> State [ctor] .
 eq start10 = {
     <>
     < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
-      < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
-        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
-      } >
+      createServerASVWrapper("B", {
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+      })
+    } >
+  }
+  .
+
+op start10S : -> State [ctor] .
+eq start10S = {
+    <>
+    < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
+      createServerASVWrapper("B", {
+        createSlowServer("B", 1 seconds, "ServerReply")
+      })
     } >
   }
   .
@@ -278,9 +349,22 @@ eq start10P = {
     <>
     < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
       createProvision(serverASVWrapper("B"), 2, 4, {
-        < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
-          < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
-        } >
+        createServerASVWrapper("B", {
+          < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+        })
+      })
+    } >
+  }
+  .
+
+op start10PS : -> State [ctor] .
+eq start10PS = {
+    <>
+    < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
+      createProvision(serverASVWrapper("B"), 2, 4, {
+        createServerASVWrapper("B", {
+          createSlowServer("B", 1 seconds, "ServerReply")
+        })
       })
     } >
   }
@@ -308,9 +392,9 @@ eq start12 = {
       < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
     })
 
-    < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
-      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
-    } >
+    createServerASVWrapper("B", {
+      < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+    })
   }
   .
 
@@ -319,9 +403,9 @@ op start13 : -> State [ctor] .
 eq start13 = {
     <>
     < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
-      < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
-        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
-      } >
+      createServerASVWrapper("B", {
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+      })
     } >
     < clientSocketWrapper(clientASVWrapper("A")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
       createClientASVWrapper("A", {
@@ -338,9 +422,9 @@ eq start14 = {
     })
 
     createProvision(serverASVWrapper("B"), 2, 4, {
-      < serverASVWrapper("B") : ServerASVWrapper | msgBuffer: mtB, bufferLen: 0, ctr: 0, maxBufferLen: 4, world: {
-        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "", msgBuffer: mtB, bufferLen: 0 >
-      } >
+      createServerASVWrapper("B", {
+        < "B" : Server | sstate: waiting, reply: "ServerReply", read: "" >
+      })
     })
   }
   .

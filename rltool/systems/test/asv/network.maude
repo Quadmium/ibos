@@ -10,6 +10,7 @@ subsort String < MessageContent .
 
 --- Send message on a connection from object A to object B
 op msg_from_to_ : MessageContent Oid Oid -> Msg [ctor msg] .
+op noMsg : -> Msg [ctor] .
 
 sort Buffer .
 subsort Msg < Buffer .
@@ -32,4 +33,16 @@ ceq replace(Buff, M, N) = mtB if Buff == mtB .
 op Client : -> Cid [ctor] .
 op Server : -> Cid [ctor] .
 
+op untilDelim : String String -> String .
+op afterDelim : String String -> String .
+
+vars S Delim Data Rest : String .
+
+ceq untilDelim(S, Delim) = Data if 
+  N    := find(S, Delim, 0) /\
+  Data := substr(S, 0, N) .
+
+ceq afterDelim(S, Delim) = Data if 
+  N    := find(S, Delim, 0) /\
+  Data := substr(S, N + 1, length(S)) .
 endm

@@ -10,10 +10,12 @@ rl : { C Config } => { C' Config } .
 --- A rule matching just C Config (not {C Config}) would be able to match many different configs to the "Config" variable
 mod STATE is
 pr CONFIGURATION .
+pr NAT .
 
 sort State .
 op {_} : Configuration -> State [ctor] .
 
 --- The world is a State stored in an attribute
 op world:_ : State -> Attribute [ctor] .
+op world : Nat State -> Attribute [ctor] .
 endm

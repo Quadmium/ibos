@@ -1,0 +1,375 @@
+load state.maude
+
+mod TIME_WRAPPER is
+pr STATE .
+pr TIME .
+pr STD-STREAM .
+
+vars OID O1 O2 O3 O4 : Oid .
+vars CID : Cid .
+vars C : Configuration .
+vars Att : AttributeSet .
+vars TM : TimerMode .
+vars N N' : Nat .
+
+op MockObject : -> Cid [ctor] .
+op MockAttribute : -> Attribute [ctor] .
+
+op WinitRoute : Oid -> Msg [ctor] .
+
+op WcreateTimer : Oid Oid -> Msg [ctor msg format (b o)] .
+op WcreatedTimer : Oid Oid Oid -> Msg [ctor msg format (m o)] .
+
+op WstartTimer : Oid Oid TimerMode NzNat -> Msg [ctor msg format (b o)] .
+op WstartedTimer : Oid Oid -> Msg [ctor msg format (m o)] .
+op WtimeOut : Oid Oid -> Msg [ctor msg format (r o)] .
+
+op WstopTimer : Oid Oid -> Msg [ctor msg format (b o)] .
+op WstoppedTimer : Oid Oid -> Msg [ctor msg format (m o)] .
+
+op WdeleteTimer : Oid Oid -> Msg [ctor msg format (b o)] .
+op WdeletedTimer : Oid Oid -> Msg [ctor msg format (m o)] .
+
+op route : Oid Oid -> Oid [ctor] .
+op route : Oid Nat Oid -> Oid [ctor] .
+
+rl [initRoute] : 
+  < OID : CID | world: {
+    WinitRoute(O1)
+    C 
+  }, Att >
+=>
+  WinitRoute(route(OID, O1))
+  < OID : CID | world: {
+    C 
+  }, Att >  
+  .
+
+rl [createTimerRoute] :
+  < OID : CID | world: {
+    WcreateTimer(timeManager, O1)
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WcreateTimer\n")
+  WcreateTimer(timeManager, route(OID, O1))
+  < OID : CID | world: {
+    C 
+  }, Att >
+  .
+
+rl [createdTimerRoute] :
+  WcreatedTimer(route(OID, O1), O2, O3)
+  < OID : CID | world: {
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WcreatedTimer\n")
+  < OID : CID | world: {
+    WcreatedTimer(O1, O2, O3)
+    C 
+  }, Att >
+  .
+
+rl [startTimerRoute] :
+  < OID : CID | world: {
+    WstartTimer(O1, O2, TM, N)
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WstartTimer\n")
+  WstartTimer(O1, route(OID, O2), TM, N)
+  < OID : CID | world: {
+    C 
+  }, Att >  
+  .
+
+rl [startedTimerRoute] :
+  WstartedTimer(route(OID, O1), O2)
+  < OID : CID | world: {
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WstartedTimer\n")
+  < OID : CID | world: {
+    WstartedTimer(O1, O2)
+    C 
+  }, Att >
+  .
+
+rl [timeOutRoute] :
+  WtimeOut(route(OID, O1), O2)
+  < OID : CID | world: {
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WtimeOut\n")
+  < OID : CID | world: {
+    WtimeOut(O1, O2)
+    C 
+  }, Att >
+  .
+
+rl [stopTimerRoute] :
+  < OID : CID | world: {
+    WstopTimer(O1, O2)
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WstopTimer\n")
+  WstopTimer(O1, route(OID, O2))
+  < OID : CID | world: {
+    C 
+  }, Att >  
+  .
+
+rl [stoppedTimerRoute] :
+  WstoppedTimer(route(OID, O1), O2)
+  < OID : CID | world: {
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WstoppedTimer\n")
+  < OID : CID | world: {
+    WstoppedTimer(O1, O2)
+    C 
+  }, Att >
+  .
+
+rl [deleteTimerRoute] :
+  < OID : CID | world: {
+    WdeleteTimer(O1, O2)
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WdeleteTimer\n")
+  WdeleteTimer(O1, route(OID, O2))
+  < OID : CID | world: {
+    C 
+  }, Att >  
+  .
+
+rl [deletedTimerRoute] :
+  WdeletedTimer(route(OID, O1), O2)
+  < OID : CID | world: {
+    C 
+  }, Att >
+=>
+  write(stdout, O1, "WdeletedTimer\n")
+  < OID : CID | world: {
+    WdeletedTimer(O1, O2)
+    C 
+  }, Att >
+  .
+
+rl [MWinitRoute] : 
+  < OID : CID | world(N', {
+    WinitRoute(O1)
+    C 
+  }), Att >
+=>
+  WinitRoute(route(OID, N', O1))
+  < OID : CID | world(N', {
+    C 
+  }), Att >  
+  .
+
+rl [MWcreateTimerRoute] :
+  < OID : CID | world(N', {
+    WcreateTimer(timeManager, O1)
+    C 
+  }), Att >
+=>
+  write(stdout, O1, "WcreateTimer\n")
+  WcreateTimer(timeManager, route(OID, N', O1))
+  < OID : CID | world(N', {
+    C 
+  }), Att >
+  .
+
+rl [MWcreatedTimerRoute] :
+  WcreatedTimer(route(OID, N', O1), O2, O3)
+  < OID : CID | world(N', {
+    C 
+  }), Att >
+=>
+  write(stdout, O1, "WcreatedTimer\n")
+  < OID : CID | world(N', {
+    WcreatedTimer(O1, O2, O3)
+    C 
+  }), Att >
+  .
+
+rl [MWstartTimerRoute] :
+  < OID : CID | world(N', {
+    WstartTimer(O1, O2, TM, N)
+    C 
+  }), Att >
+=>
+  write(stdout, O1, "WstartTimer\n")
+  WstartTimer(O1, route(OID, N', O2), TM, N)
+  < OID : CID | world(N', {
+    C 
+  }), Att >  
+  .
+
+rl [MWstartedTimerRoute] :
+  WstartedTimer(route(OID, N', O1), O2)
+  < OID : CID | world(N', {
+    C 
+  }), Att >
+=>
+  write(stdout, O1, "WstartedTimer\n")
+  < OID : CID | world(N', {
+    WstartedTimer(O1, O2)
+    C 
+  }), Att >
+  .
+
+rl [MWtimeOutRoute] :
+  WtimeOut(route(OID, N', O1), O2)
+  < OID : CID | world(N', {
+    C 
+  }), Att >
+=>
+  write(stdout, O1, "WtimeOut\n")
+  < OID : CID | world(N', {
+    WtimeOut(O1, O2)
+    C 
+  }), Att >
+  .
+
+rl [MWstopTimerRoute] :
+  < OID : CID | world(N', {
+    WstopTimer(O1, O2)
+    C 
+  }), Att >
+=>
+  write(stdout, O1, "WstopTimer\n")
+  WstopTimer(O1, route(OID, N', O2))
+  < OID : CID | world(N', {
+    C 
+  }), Att >  
+  .
+
+rl [MWstoppedTimerRoute] :
+  WstoppedTimer(route(OID, N', O1), O2)
+  < OID : CID | world(N', {
+    C 
+  }), Att >
+=>
+  write(stdout, O1, "WstoppedTimer\n")
+  < OID : CID | world(N', {
+    WstoppedTimer(O1, O2)
+    C 
+  }), Att >
+  .
+
+rl [MWdeleteTimerRoute] :
+  < OID : CID | world(N', {
+    WdeleteTimer(O1, O2)
+    C 
+  }), Att >
+=>
+  write(stdout, O1, "WdeleteTimer\n")
+  WdeleteTimer(O1, route(OID, N', O2))
+  < OID : CID | world(N', {
+    C 
+  }), Att >  
+  .
+
+rl [MWdeletedTimerRoute] :
+  WdeletedTimer(route(OID, N', O1), O2)
+  < OID : CID | world(N', {
+    C 
+  }), Att >
+=>
+  write(stdout, O1, "WdeletedTimer\n")
+  < OID : CID | world(N', {
+    WdeletedTimer(O1, O2)
+    C 
+  }), Att >
+  .
+
+rl [initRouteImpl] :
+  <>
+  WinitRoute(O1)
+=>
+  <>
+  write(stdout, O1, "WinitRoute\n")
+  < O1 : MockObject | MockAttribute >
+  .
+
+rl [createTimerImpl] :
+  <>
+  WcreateTimer(timeManager, O1)
+=>
+  <>
+  createTimer(timeManager, O1)
+  .
+
+rl [createdTimerImpl] :
+  <>
+  createdTimer(O1, O2, O3)
+=>
+  <>
+  WcreatedTimer(O1, O2, O3)
+  .
+
+rl [startTimerImpl] :
+  <>
+  WstartTimer(O1, O2, TM, N)
+=>
+  <>
+  startTimer(O1, O2, TM, N)
+  .
+
+rl [startedTimerImpl] :
+  <>
+  startedTimer(O1, O2)
+=>
+  <>
+  WstartedTimer(O1, O2)
+  .
+
+rl [timeOutImpl] :
+  <>
+  timeOut(O1, O2)
+=>
+  <>
+  WtimeOut(O1, O2)
+  .
+
+rl [stopTimerImpl] :
+  <>
+  WstopTimer(O1, O2)
+=>
+  <>
+  stopTimer(O1, O2)
+  .
+
+rl [stoppedTimerImpl] :
+  <>
+  stoppedTimer(O1, O2)
+=>
+  <>
+  WstoppedTimer(O1, O2)
+  .
+
+rl [deleteTimerImpl] :
+  <>
+  WdeleteTimer(O1, O2)
+=>
+  <>
+  deleteTimer(O1, O2)
+  .
+
+rl [deletedTimerImpl] :
+  <>
+  deletedTimer(O1, O2)
+=>
+  <>
+  WdeletedTimer(O1, O2)
+  .
+
+endm
