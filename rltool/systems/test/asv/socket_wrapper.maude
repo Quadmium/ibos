@@ -70,7 +70,7 @@ rl [outgoingMsg] :
     C
   }, Att >
 =>
-  write(stdout, A, "Outgoing socket msg\n")
+  ---write(stdout, A, "Outgoing socket msg\n")
   send(Sock, clientSocketWrapper(A), M + ";")
   < clientSocketWrapper(A) : ClientSocketWrapper | cswState: connected(Sock), world: {
     C
@@ -94,7 +94,7 @@ crl [incomingMsg] :
     (msg Data from B to A)
     C
   }, Att >
-  write(stdout, A, "Incoming socket msg\n")
+  ---write(stdout, A, "Incoming socket msg\n")
 if
   length(S) =/= 0 /\
   Data := untilDelim(S, ";") /\

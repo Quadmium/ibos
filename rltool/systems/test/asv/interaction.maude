@@ -21,52 +21,60 @@ pr TIME_WRAPPER .
 op target:_ : Oid -> Attribute [ctor] .
 
 sort ClientState .
-ops sending waiting : -> ClientState [ctor] .
+ops sending waitingStartTime waitingReply waitingEndTime : -> ClientState [ctor] .
 op cstate:_ : ClientState -> Attribute [ctor] .
 
 op spam:_ : Nat -> Attribute [ctor] .
+op startTime:_ : Nat -> Attribute [ctor] .
+op iterations:_ : Nat -> Attribute [ctor] .
+op totalTime:_ : Nat -> Attribute [ctor] .
 
 vars A B : Oid .
 vars Att : AttributeSet .
 vars S S' : String .
-vars N : Nat .
+vars N N' N'' N''' : Nat .
 
 op createClient : Oid Oid Nat -> Configuration [ctor] .
 eq createClient(A, B, N) = 
-  < A : Client | cstate: sending, target: B, spam: N, read: "" >
+  < A : Client | cstate: sending, target: B, spam: N, read: "", startTime: 0, iterations: 0, totalTime: 0 >
   WinitRoute(A)
   .
 
 crl [send] :
-  < A : Client | cstate: sending, target: B, spam: N, Att >
+  < A : Client | cstate: sending, target: B, spam: N, iterations: N', Att >
 =>
-  < A : Client | cstate: sending, target: B, spam: (N - 1), Att >
+  < A : Client | cstate: waitingStartTime, target: B, spam: (N - 1), iterations: s(N'), Att >
+  WgetTimeSinceEpoch(timeManager, A)
   (msg ("ClientMsg" + string(N, 10)) from A to B)
 if
   N > 0
   .
 
-rl [sendDone] : 
-  < A : Client | cstate: sending, target: B, spam: 0, Att >
-=>
-  < A : Client | cstate: waiting, target: B, spam: 0, Att >
-  .
-
 rl [read] :
-  < A : Client | cstate: waiting, target: B, read: S, Att >
+  < A : Client | cstate: waitingReply, target: B, read: S, Att >
   (msg S' from B to A)
 =>
   WgetTimeSinceEpoch(timeManager, A)
   write(stdout, A, "Read success\n")
-  < A : Client | cstate: waiting, target: B, read: (S + S'), Att >
+  < A : Client | cstate: waitingEndTime, target: B, read: (S + S'), Att >
   .
 
-rl [time] :
-  < A : Client | Att >
+rl [startTime] :
+  < A : Client | cstate: waitingStartTime, startTime: N', Att >
   WgotTimeSinceEpoch(A, timeManager, N)
 =>
-  < A : Client | Att >
-  write(stdout, A, string(N, 10) + "\n")
+  < A : Client | cstate: waitingReply, startTime: N, Att >
+  ---write(stdout, A, "Client start at " + string(N, 10) + "\n")
+  .
+
+rl [endTime] :
+  < A : Client | cstate: waitingEndTime, startTime: N', iterations: N'', totalTime: N''', Att >
+  WgotTimeSinceEpoch(A, timeManager, N)
+=>
+  < A : Client | cstate: sending, startTime: N', iterations: N'', totalTime: (N''' + (N - N')), Att >
+  ---write(stdout, A, "Client end at " + string(N, 10) + "\n")
+  ---write(stdout, A, "Client T: " + string(float(N - N') / 1000000000.0) + "\n")
+  write(stdout, A, "Client avg T: " + string(float((N''' + (N - N'))) / 1000000000.0 / float(N'')) + "\n")
   .
 endm
 
@@ -185,7 +193,7 @@ rl [createdTimer] :
   WcreatedTimer(A, B, O)
 =>
   < A : Attacker | astate: ready, timer: O, Att >
-  WstartTimer(O, A, periodic, (1 seconds) quo 4)
+  WstartTimer(O, A, periodic, (1 seconds) quo 10)
   .
 
 rl [read] :
@@ -524,15 +532,15 @@ eq startAM = {
       })
     } >
     < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
-      createProvision(serverASVWrapper("B"), 1, 1, {
+      createProvision(serverASVWrapper("B"), 3, 1, {
         createServerASVWrapper("B", {
           createSlowServer("B", 1 seconds, "ServerReply")
         })
       })
     } >
-    ---< clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
-    ---  createAttacker("A", "B")
-    ---} >
+    < clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+      createAttacker("A", "B")
+    } >
   }
   .
 endm
