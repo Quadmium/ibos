@@ -33,7 +33,7 @@ crl [send] :
   < A : Client | cstate: sending, target: B, spam: N, Att >
 =>
   < A : Client | cstate: sending, target: B, spam: (N - 1), Att >
-  (msg ("ClientMsg" + string(100 - N, 10)) from A to B)
+  (msg ("ClientMsg" + string(N, 10)) from A to B)
 if
   N > 0
   .
@@ -361,7 +361,7 @@ op start10PS : -> State [ctor] .
 eq start10PS = {
     <>
     < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
-      createProvision(serverASVWrapper("B"), 2, 4, {
+      createProvision(serverASVWrapper("B"), 100000, 1, {
         createServerASVWrapper("B", {
           createSlowServer("B", 1 seconds, "ServerReply")
         })
@@ -375,9 +375,19 @@ eq start11 = {
     <>
     < clientSocketWrapper(clientASVWrapper("A")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
       createClientASVWrapper("A", {
-        < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
+        < "A" : Client | cstate: sending, target: "B", read: "", spam: 100 >
+      })
+    } > ***(
+    < clientSocketWrapper(clientASVWrapper("C")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+      createClientASVWrapper("C", {
+        < "C" : Client | cstate: sending, target: "B", read: "", spam: 100 >
       })
     } >
+    < clientSocketWrapper(clientASVWrapper("D")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+      createClientASVWrapper("D", {
+        < "D" : Client | cstate: sending, target: "B", read: "", spam: 100 >
+      })
+    } >)
   }
   .
 
@@ -388,6 +398,7 @@ rl unwrap(socket(N)) => socket(N) .
 
 op start12 : -> State [ctor] .
 eq start12 = {
+    <>
     createClientASVWrapper("A", {
       < "A" : Client | cstate: sending, target: "B", read: "", spam: 4 >
     })
@@ -417,6 +428,7 @@ eq start13 = {
 
 op start14 : -> State [ctor] .
 eq start14 = {
+    <>
     createClientASVWrapper("A", {
       < "A" : Client | cstate: sending, target: "B", read: "", spam: 1 >
     })

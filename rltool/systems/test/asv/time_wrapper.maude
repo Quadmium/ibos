@@ -291,13 +291,23 @@ rl [MWdeletedTimerRoute] :
   }), Att >
   .
 
-rl [initRouteImpl] :
+op objInConfig : Oid Configuration -> Bool .
+eq objInConfig(O1, < O1 : CID | Att > C) = true .
+eq objInConfig(O1, C) = false [owise] .
+
+crl [initRouteImpl] : {
   <>
   WinitRoute(O1)
-=>
+  C
+}
+=> {
   <>
   write(stdout, O1, "WinitRoute\n")
   < O1 : MockObject | MockAttribute >
+  C
+}
+if
+  not objInConfig(O1, C)
   .
 
 rl [createTimerImpl] :

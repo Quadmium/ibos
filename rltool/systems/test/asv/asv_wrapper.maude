@@ -151,13 +151,14 @@ vars C C' : Configuration .
 vars Att Att' Att'' : AttributeSet .
 vars Buff : Buffer .
 vars N N' : Nat .
+vars I : Int .
 vars CT : Nat .
 vars S : String .
 vars ST : State .
 
 op ctr:_ : Nat -> Attribute [ctor] .
 op currentMsg:_ : Msg -> Attribute [ctor] .
-op clientMsgID : Oid Nat -> Attribute [ctor] .
+op clientMsgID : Oid Int -> Attribute [ctor] .
 
 op log : Universal -> Configuration [ctor poly(1)] .
 
@@ -177,37 +178,39 @@ crl [incomingMsgFirstTime] :
   < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, Att >
   (msg M from clientASVWrapper(A) to serverASVWrapper(B))
 =>
-  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), clientMsgID(clientASVWrapper(A), getMsgID(M)), Att >
+  write(stdout, B, "ASV read " + M + " - " + string(getMsgID(M), 10) + "-" + "-1" + "\n")
+  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), clientMsgID(clientASVWrapper(A), -1), Att >
 if
   not hasClientID(clientASVWrapper(A), Att)
   .
 
 crl [incomingMsg] :
-  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, clientMsgID(clientASVWrapper(A), N), Att >
+  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, clientMsgID(clientASVWrapper(A), I), Att >
   (msg M from clientASVWrapper(A) to serverASVWrapper(B))
 =>
-  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), clientMsgID(clientASVWrapper(A), getMsgID(M)), Att >
+  write(stdout, B, "ASV read " + M + " - " + string(getMsgID(M), 10) + "-" + string(I, 10) + "\n")
+  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), clientMsgID(clientASVWrapper(A), I), Att >
 if
-  getMsgID(M) > N
+  getMsgID(M) > I
   .
 
 crl [incomingMsgNotFull] :
-  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), msgBuffer: Buff, bufferLen: N, maxBufferLen: N', Att >
+  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), msgBuffer: Buff, bufferLen: N, maxBufferLen: N', clientMsgID(clientASVWrapper(A), I), Att >
 =>
-  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, msgBuffer: (Buff, (msg M from A to B)), bufferLen: s(N), maxBufferLen: N', Att >
+  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, msgBuffer: (Buff, (msg M from A to B)), bufferLen: s(N), maxBufferLen: N', clientMsgID(clientASVWrapper(A), getMsgID(M)), Att >
 if
   N < N'
   .
 
 crl [incomingMsgFull] :
-  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), msgBuffer: Buff, bufferLen: N, maxBufferLen: N', ctr: CT, Att >
+  < serverASVWrapper(B) : ServerASVWrapper | currentMsg: (msg M from clientASVWrapper(A) to serverASVWrapper(B)), msgBuffer: Buff, bufferLen: N, maxBufferLen: N', ctr: CT, clientMsgID(clientASVWrapper(A), I), Att >
 =>
-  ---write(stdout, A, "Full\n")
+  write(stdout, A, "ASV full\n")
   ---log((msg string(CT, 10) from A to B), Buff)
   if sampleBernoulli(float(N') / (float(CT) + 1.0))
   then < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, msgBuffer: replace(Buff, (msg M from A to B), sampleUniform(0, N' - 1)), 
-         bufferLen: N, maxBufferLen: N', ctr: (CT + 1), Att >
-  else < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, msgBuffer: Buff, bufferLen: N, maxBufferLen: N', ctr: (CT + 1), Att >
+         bufferLen: N, maxBufferLen: N', ctr: (CT + 1), clientMsgID(clientASVWrapper(A), getMsgID(M)), Att >
+  else < serverASVWrapper(B) : ServerASVWrapper | currentMsg: noMsg, msgBuffer: Buff, bufferLen: N, maxBufferLen: N', ctr: (CT + 1), clientMsgID(clientASVWrapper(A), I), Att >
   fi
 if 
   N == N'
@@ -275,19 +278,20 @@ vars M : MessageContent .
 vars C C' : Configuration .
 vars Att Att' Att'' : AttributeSet .
 vars Buff : Buffer .
-vars N N' TargetServers K L : Nat .
+vars N N' N'' TargetServers K L : Nat .
 vars CT : Nat .
 vars ST : State .
 
 op serverInitState:_ : State -> Attribute [ctor] .
 op worldCtr:_ : Nat -> Attribute [ctor] .
 op requestCtr:_ : Nat -> Attribute [ctor] .
+op nextWorldIdx:_ : Nat -> Attribute [ctor] .
 op k:_ : Nat -> Attribute [ctor] .
 op expectedLoadPerSec:_ : Nat -> Attribute [ctor] .
 
 op createProvision : Oid Nat Nat State -> Configuration .
 eq createProvision(A, K, L, ST) = 
-  < provision(A) : Provision | serverInitState: ST, world(0, ST), worldCtr: 1, requestCtr: 0, k: K, expectedLoadPerSec: L > 
+  < provision(A) : Provision | serverInitState: ST, world(0, ST), worldCtr: 1, nextWorldIdx: 0, requestCtr: 0, k: K, expectedLoadPerSec: L > 
   createTimer(timeManager, provision(A))
   .
 
@@ -304,7 +308,7 @@ crl [timeoutNothing] :
   < provision(A) : Provision | worldCtr: N, requestCtr: 0, k: K, expectedLoadPerSec: L, Att >
   write(stdout, A, "Provision timeout - no changes\n")
 if
-  N' <= (L * N) * K
+  N' <= 5 * (L * N) * K
   .
 
 crl [timeoutAdd] :
@@ -314,19 +318,21 @@ crl [timeoutAdd] :
   < provision(A) : Provision | serverInitState: ST, world(N, ST), worldCtr: s(N), requestCtr: 0, k: K, expectedLoadPerSec: L, Att >
   write(stdout, A, "Provision timeout - added server\n")
 if
-  N' > (L * N) * K
+  N' > 5 * (L * N) * K
   .
 
 rl [incomingMsg] :
   (msg M from A to B)
-  < provision(B) : Provision | world(0, { C }), requestCtr: N, Att >
+  < provision(B) : Provision | world(N', { C }), nextWorldIdx: N', worldCtr: N'', requestCtr: N, Att >
 =>
-  < provision(B) : Provision | world(0, { (msg M from A to B) C }), requestCtr: s(N), Att >
+  ---write(stdout, B, "Provision in " + string(N', 10) + "\n")
+  < provision(B) : Provision | world(N', { (msg M from A to B) C }), nextWorldIdx: (s(N') rem N''), worldCtr: N'', requestCtr: s(N), Att >
   .
 
 rl [outgoingMsg] :
   < provision(B) : Provision | world(N, { (msg M from B to A ) C }), Att >
 =>
+  ---write(stdout, B, "Provision out " + string(N, 10) + "\n")
   < provision(B) : Provision | world(N, { C }), Att >
   (msg M from B to A )
   .

@@ -195,7 +195,7 @@ crl [incomingMsg] :
     (msg Data from CSock to A)
     C
   }, Att >
-  write(stdout, A, "Server received\n")
+  ---write(stdout, A, "Server received\n")
 if
   length(S) =/= 0 /\
   Data := untilDelim(S, ";") /\
@@ -212,7 +212,7 @@ rl [outgoingMsg] :
     C
   }, Att >
   send(unwrap(CSock), serverSocketWrapper(serverS(A, Port)), M + ";")
-  write(stdout, A, "Server outgoing\n")
+  ---write(stdout, A, "Server outgoing\n")
   .
 
 rl [sent] :
