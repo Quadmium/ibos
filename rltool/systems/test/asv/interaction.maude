@@ -183,7 +183,7 @@ vars C : Configuration .
 
 op createAttacker : Oid Oid -> Configuration .
 eq createAttacker(A, B) =
-  < A : Attacker | astate: waiting, target: B, ctr: 0 >
+  < A : Attacker | astate: waiting, target: B, ctr: 100 >
   WinitRoute(A)
   WcreateTimer(timeManager, A)
   .
@@ -193,7 +193,7 @@ rl [createdTimer] :
   WcreatedTimer(A, B, O)
 =>
   < A : Attacker | astate: ready, timer: O, Att >
-  WstartTimer(O, A, periodic, (1 seconds) quo 10)
+  WstartTimer(O, A, periodic, (1 seconds) quo 5)
   .
 
 rl [read] :
@@ -448,8 +448,11 @@ eq start11 = {
     <>
     < clientSocketWrapper(clientASVWrapper("A")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
       createClientASVWrapper("A", {
-        < "A" : Client | cstate: sending, target: "B", read: "", spam: 100 >
+        createClient("A", "B", 100) ---< "A" : Client | cstate: sending, target: "B", read: "", spam: 100 >
       })
+    } > 
+    < clientSocketWrapper("A") : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
+      createAttacker("A", "B")
     } > ***(
     < clientSocketWrapper(clientASVWrapper("C")) : ClientSocketWrapper | cswState: waiting, targetServer: serverC("127.0.0.1", 1234), world: {
       createClientASVWrapper("C", {
@@ -532,7 +535,7 @@ eq startAM = {
       })
     } >
     < serverSocketWrapper(serverS(serverASVWrapper("B"), 1234)) : ServerSocketWrapper | world: {
-      createProvision(serverASVWrapper("B"), 3, 1, {
+      createProvision(serverASVWrapper("B"), 1000, 1, {
         createServerASVWrapper("B", {
           createSlowServer("B", 1 seconds, "ServerReply")
         })

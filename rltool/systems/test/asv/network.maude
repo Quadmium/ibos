@@ -30,6 +30,11 @@ ceq replace((M', Buff), M, N) = (M', replace(Buff, M, (N - 1))) if N >= 1 .
 ceq replace((M', Buff), M, N) = (M, Buff) if N == 0 .
 ceq replace(Buff, M, N) = mtB if Buff == mtB .
 
+op contains : Buffer Msg -> Bool .
+eq contains( (M, Buff), M ) = true .
+ceq contains( (M', Buff), M ) = contains(Buff, M) if M' =/= M .
+eq contains(Buff, M) = false [owise] .
+
 op Client : -> Cid [ctor] .
 op Server : -> Cid [ctor] .
 
